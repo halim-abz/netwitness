@@ -9,26 +9,34 @@ module ${module_id};
 //Based on original rule from: Eric Partington
 
 //Update learning phase to desired number of days
-@Name('Named Window - learningWindowClient')
-CREATE WINDOW lPhaseClient.win:length(1) (learningPhase long);
-INSERT INTO lPhaseClient
+@Name('Named Window - NewUserAgent')
+CREATE WINDOW NewUserAgent_learning.win:length(1) (learningPhase long);
+INSERT INTO NewUserAgent_learning
 SELECT current_timestamp.plus(${learning_days?c} days) as learningPhase FROM PATTERN[Event];
 
 //Window to Store New Data
-@Name('Named Window - whatsNewClient')
+@Name('Named Window - NewUserAgent')
 @RSAPersist	
-CREATE WINDOW whatsNewClient.win:keepall().std:unique(client) (client string, ip_src string, ip_dst string, direction string, org_dst string, domain_dst string, alias_host string, medium short, time long);
+CREATE WINDOW NewUserAgent.win:keepall().std:unique(client) (client string, time long);
 
-//Store in the window
-@Name('Insert client')
-INSERT INTO whatsNewClient
-SELECT client, ip_src, ip_dst, direction, org_dst, domain_dst, cast(alias_host, string) as alias_host, medium, time 
-FROM Event(client IS NOT NULL AND client NOT IN (SELECT client FROM whatsNewClient));
+//If value already exists, update timestamp, if not, create new entry
+ON Event(client IS NOT NULL AND direction NOT IN ('inbound')) as e
+MERGE NewUserAgent as w
+WHERE w.client = e.client
+WHEN MATCHED
+    THEN UPDATE SET w.time = e.time
+WHEN NOT MATCHED
+    THEN INSERT SELECT e.client as client, e.time as time;
 
 //Compare to client stored in the window
 @Name('${module_id}_Alert')
 @RSAAlert
 SELECT *
-FROM Event(client NOT IN (SELECT client FROM whatsNewClient) AND client IS NOT NULL
-AND current_timestamp > (SELECT learningPhase FROM lPhaseClient))
+FROM Event(client IS NOT NULL AND direction NOT IN ('inbound') AND client NOT IN (SELECT client FROM NewUserAgent)
+AND current_timestamp > (SELECT learningPhase FROM NewUserAgent_learning))
 OUTPUT ALL EVERY ${group_hours?c} hours;
+
+//Every day, clear values older than x days
+ON PATTERN [every timer:interval(1 day)]
+DELETE FROM NewUserAgent
+WHERE time < current_timestamp.minus(${phaseout_days?c);
