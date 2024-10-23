@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esacom000048</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>9</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+
+	<variables>
+
+		<variable id="domain_list" is_array="true">
+			<name ref="$domain_list_name"/>
+			<desc ref="$domain_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+	</variables>
+</module>
