@@ -1,0 +1,71 @@
+﻿ID,Name,Att&ck ID,Tactic,Technique,Sub-Technique
+esa000240,Horizontal Network Service Discovery,T1046,Discovery,Network Service Discovery,-
+esa000241,Network Password Spraying,T1110.003,Credential Access,Brute Force,Password Spraying
+esa000242,Credential Stuffing,T1110.004,Credential Access,Brute Force,Credential Stuffing
+esa000243,Credential Stuffing Over SMB,T1110.004,Credential Access,Brute Force,Credential Stuffing
+esa000244,Kerberos Account Scanning,T1087,Discovery,Account Discovery,-
+esa000245,Password Guessing - Protocols with Clear-Text Password,T1110.001,Credential Access,Brute Force,Password Guessing
+esa000246,Password Guessing - Protocol with Error Message,T1110.001,Credential Access,Brute Force,Password Guessing
+esa000247,Password Guessing over RDP,T1110.001,Credential Access,Brute Force,Password Guessing
+esa000248,Multiple OS on the Same Host,T1564.006,Defense Evasion,Hide Artifacts,Run Virtual Instance
+esa000249,Kerberoasting Cipher Downgrade,T1558.003,Credential Access,Steal or Forge Kerberos Tickets,Kerberoasting
+esa000250,DGA Multiple Failed Unqiue Domain Resolutions,T1568.002,Command and Control,Dynamic Resolution,Domain Generation Algorythm
+esa000251,Multiple Different HTTP 4xx Errors,T1071.001,Command and Control,Application Layer Protocol,Web Protocols
+esa000252,Communication to Same Domain with Many Subdomains,T1071.004,Command and Control,Application Layer Protocol,DNS
+esa000253,Programatic Inbound HTTP POST Requests,T1505.003,Persistence,Server Software Component,Web Shell
+esa000254,Multiple Outbound 404 Error (Expired C2 Server),T1071.001,Command and Control,Application Layer Protocol,Web Protocols
+esa000255,Multiple Internal HTTP 404 Errors,T1595.003,Reconnaissance,Active Scanning,Wordlist Scanning
+esa000256,Multiple Unique User Agents,T1595.003,Reconnaissance,Active Scanning,
+esa000257,Upload of Archive File to FTP,T1048.003,Exfiltration,Exfiltration Over Alternative Protocol,Exfiltration over Unencrypted Non-C2 Protocol
+esa000258,Upload of Archive Direct to IP over HTTP,T1048.003,Exfiltration,Exfiltration Over Alternative Protocol,Exfiltration over Unencrypted Non-C2 Protocol
+esa000259,Upload of File Over the Telegram API,T1567,Exfiltration,Exfiltration Over Web Service,-
+esa000260,Email with OneNote File Attachment,T1566.001,Initial Access,Phishing,Spearphishing Attachment
+esa000261,Attachment with Macro Enabled Office Document,T1566.001,Initial Access,Phishing,Spearphishing Attachment
+esa000262,Multiple Failed Access Attempts to Network Shares,T1135,Discovery,Network Share Discovery,-
+esa000263,Large LDAP Session Possible Reconnaissance,T1087.002,Discovery,Account Discovery,Domain Account
+esa000264,Suspicious PowerShell Script Download,T1105,Command and Control,Ingress Tool Transfer,-
+esa000265,Suspicious Executable Download,T1105,Command and Control,Ingress Tool Transfer,-
+esa000266,Remotely Add User to Domain Group,T1098,Privilege Escalation,Account Manipulation,-
+esa000267,Remote Execution Potential PsExec,T1569.002,Execution,System Services,Service Execution
+esa000268,"Remote Service Created, Deleted, or Modified",T1569.002,Execution,System Services,Service Execution
+esa000269,Scheduled Task,T1053.005,Execution,Scheduled Task/Job,Scheduled Task
+esa000270,Remote Shutdown,T1529,Impact,System Shutdown/Reboot,-
+esa000271,Windows Event Logs Cleared,T1070.001,Defense Evasion,Indicator Removal,Clear Windows Event Logs
+esa000272,Possible Lateral Movement Over SMB,T1021.002,Lateral Movement,Remote Services,SMB/Windows Admin Shares
+esa000273,Download Suspicious File with wget-curl,T1105,Command and Control,Ingress Tool Transfer,-
+esa000274,BITS job Downloads Executable,T1105,Command and Control,Ingress Tool Transfer,-
+esa000275,HTTP POST Direct to IP with Archive File,T1048,Exfiltration,Exfiltration Over Alternative Protocol,-
+esa000276,NTDS Accessible over SMB,T1003.003,Credential Access,OS Credential Dumping,NTDS
+esa000277,VNC with no Authentication Required,T1021.005,Lateral Movement,Remote Services,VNC
+esa000278,Possible SQL Injection,T1190,Initial Access,Exploit Public-Facing Application,-
+esa000279,Possible Zerologon Attempt,T1210,Lateral Movement,Exploitation of Remote Services,-
+esa000280,DNS Zone Transfer,T1590.002,Reconnaissance,Gather Victim Network Information,DNS
+esa000281,Outbound Traffic to Tor Network,T1090.003,Command and Control,Proxy,Multi-hop Proxy
+esa000282,PowerShell Initiating Outbound Connection,T1059.001,Execution,Command and Scripting Interpreter,PowerShell
+esa000283,Domain Replication,T1003.006,Credential Access,OS Credential Dumping,DCSync
+esa000284,Lolbas Downloading Risky Filetype,T1105,Command and Control,Ingress Tool Transfer,-
+esa000285,Kerberos with Disabled Account,,,,
+esa000286,Mimikatz Strings Detected,T1003,Credential Access,OS Credential Dumping,-
+esa000287,Potential SSH Tunnel,T1572,Command and Control,Protocol Tunneling,-
+esa000288,Kali Detected,,,,
+esa000289,Download of Risky Filetype from Uncommon Domain,T1105,Command and Control,Ingress Tool Transfer,-
+esa000290,Outbound Connection to Self-Signed Certificate,T1071.001,Command and Control,Application Layer Protocol,Web Protocols
+esa000291,Outbound Connection to Suspicious Certificate,T1071.001,Command and Control,Application Layer Protocol,Web Protocols
+esa000292,Outbound SSH Connection,T1041,Exfiltration,Exfiltration Over C2 Channel,-
+esa000293,Executable File Copied to Common Admin Shared Folder,T1080,Lateral Movement,Tainted Shared Content,-
+esa000294,New User Agents,,,,
+esa000295,New SSH Outbound Destination,,,,
+esa000296,New PowerShell IP Destination,,,,
+esa000297,New Lolbas IP Destination,,,,
+esa000298,New IP Downloading PS Script,,,,
+esa000299,New Destination for EXE Download,,,,
+esa000300,New Source Connecting Over RDP,,,,
+esa000301,New Source Connecting Over SSH,,,,
+esa000302,New Cert Authorities,,,,
+esa000303,New SSH Client,,,,
+esa000304,New Outbound IP with IOC,,,,
+esa000305,FirstWatch Feed Match for Outbound Traffic,,,,
+esa000306,FirstWatch Feed Match for Inbound Traffic,,,,
+esa000307,Dictionary-based Password,,,,
+esa000308,Hacktool User Agent,,,,
+esa000309,Suspicious User Agent,,,,
