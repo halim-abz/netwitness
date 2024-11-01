@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000267
+Title=Remote Execution Potential PsExec
+Medium=packet
+Tags=
+Description=Detects when a remote service is created and executed, which can be indicative a remote execution with PsExec.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags="execution":"system services"
+MitreIDs=T1569.002
+Testdata=

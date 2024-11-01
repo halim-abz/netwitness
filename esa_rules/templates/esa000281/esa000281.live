@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000281
+Title=Outbound Traffic to Tor Network
+Medium=packet
+Tags=
+Description=Detects when an outbound connection is made to the Tor network.
+Dependencies=feed:rsa_ip_feed
+Discontinued=false
+risk=medium
+MitreTags="command and control":"proxy"
+MitreIDs=T1090.003
+Testdata=

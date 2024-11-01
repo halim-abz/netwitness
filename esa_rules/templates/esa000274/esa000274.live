@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000274
+Title=BITS Job Downloads Executable
+Medium=packet
+Tags=
+Description=Detects when a BITS Job is used to download executables over HTTP.
+Dependencies=feed:top_10k_domains
+Discontinued=false
+risk=medium
+MitreTags="command and control":"ingress tool transfer"
+MitreIDs=T1105
+Testdata=

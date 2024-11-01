@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000272
+Title=Possible Lateral Movement Over SMB
+Medium=packet
+Tags=
+Description=Detects when C$ and Admin$ administrative shares are used.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="lateral movement":"remote services"
+MitreIDs=T1021.002
+Testdata=

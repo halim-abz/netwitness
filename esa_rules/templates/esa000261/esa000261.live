@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000261
+Title=Attachment with Macro Enabled Office Document
+Medium=packet
+Tags=
+Description=Detects when an attachment includes a macro-enabled file extension. The list of file extensions to monitor is configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="initial access":"phishing"
+MitreIDs=T1566.001
+Testdata=

@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000307
+Title=Dictionary-based Password
+Medium=packet
+Tags=
+Description=Detects when a clear-text password is part of the top 100k list of most common passwords. Must deploy the 'Top 100k Passwords' feed.
+Dependencies=feed:top_100k_passwords
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

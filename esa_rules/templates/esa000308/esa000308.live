@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000308
+Title=Hacktool User Agent
+Medium=packet
+Tags=
+Description=Detects the usage of a hacking tool based on known user-agent strings. Must deploy 'hacktool user agent' application rule.
+Dependencies=app_rule:"hacktool user agent"
+Discontinued=false
+risk=high
+MitreTags=
+MitreIDs=
+Testdata=

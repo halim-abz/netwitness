@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000282
+Title=PowerShell Initiating Outbound Connection
+Medium=packet
+Tags=
+Description=Detects when a user-agent string that may be linked to PowerShell is seen initiating an outbound connection.
+Dependencies=feed:top_10k_domains
+Discontinued=false
+risk=high
+MitreTags="execution":"command and scripting interpreter"
+MitreIDs=T1059.001
+Testdata=

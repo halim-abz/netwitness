@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000241
+Title=Network Password Spraying
+Medium=packet
+Tags=
+Description=Detects when multiple authentication attempts happen using the same password but X different unique usernames from the same source IP to the same destination IP within Y seconds. Applies only to services that have the password extracted in clear-text. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="credential access":"brute force"
+MitreIDs=T1110.003
+Testdata=

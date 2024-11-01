@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000283
+Title=Domain Replication
+Medium=packet
+Tags=
+Description=Detects domain replication activity.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags="credential access":"os credential dumping"
+MitreIDs=T1003.006
+Testdata=

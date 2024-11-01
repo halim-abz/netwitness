@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000286
+Title=Mimikatz Strings Detected
+Medium=packet
+Tags=
+Description=Detects when strings related to mimkatz are identified within the user-agent or user string.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags="credential access":"os credential dumping"
+MitreIDs=T1003
+Testdata=

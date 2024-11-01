@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000291</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>3</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="ip_list" is_array="true">
+			<name ref="$ip_list_name"/>
+			<desc ref="$ip_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="domain_list" is_array="true">
+			<name ref="$domain_list_name"/>
+			<desc ref="$domain_list_desc"/>
+			<value type="string">microsoft.com</value>
+			<value type="string">windows.com</value>
+			<value type="string">windows.net</value>
+			<value type="string">office.com</value>
+			<value type="string">office.net</value>
+			<value type="string">office365.com</value>
+			<value type="string">outlook.com</value>
+			<value type="string">onenote.com</value>
+			<value type="string">sharepoint.com</value>
+			<value type="string">live.com</value>
+			<value type="string">google.com</value>
+			<value type="string">googleapis.com</value>
+			<value type="string">googleusercontent.com</value>
+			<value type="string">google-analytics.com</value>
+			<value type="string">gstatic.com</value>
+			<value type="string">youtube.com</value>
+			<value type="string">amazonaws.com</value>
+			<value type="string">amazon.com</value>
+			<value type="string">linkedin.com</value>
+			<value type="string">apple.com</value>
+			<value type="string">icloud.com</value>
+			<value type="string">netwitness.com</value>
+			<value type="string">yahoo.com</value>
+			<value type="string">cloudfront.net</value>
+			<value type="string">ubuntu.com</value>
+		</variable>
+		<variable id="cert_list" is_array="true">
+			<name ref="$cert_list_name"/>
+			<desc ref="$cert_list_desc"/>
+			<value type="string">certificate issued within last day</value>
+			<value type="string">certificate issued within last week</value>
+			<value type="string">certificate expired</value>
+		</variable>
+		<variable id="top10kfeed_enabled">
+			<name ref="$top10kfeed_name"/>
+			<desc ref="$top10kfeed_desc"/>
+			<value type="string">yes</value>
+		</variable>
+	</variables>
+</module>

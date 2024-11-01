@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000253
+Title=Programatic Inbound HTTP POST Requests
+Medium=packet
+Tags=
+Description=Detects when X number of inbound HTTP sessions with a POST without a GET and no referrer are seen between the same source IP and the same destination IP within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="persistence":"server software component"
+MitreIDs=T1505.003
+Testdata=

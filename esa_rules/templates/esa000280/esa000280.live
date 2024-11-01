@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000280
+Title=DNS Zone Transfer
+Medium=packet
+Tags=
+Description=Detects when a DNS Zone Transfer is identified.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="reconnaissance":"gather victim network information"
+MitreIDs=T1590.002
+Testdata=

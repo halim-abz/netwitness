@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000277
+Title=VNC with no Authentication Required
+Medium=packet
+Tags=
+Description=Detects when a VNC connection is attempted without authentication required.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags="credential access":"os credential dumping"
+MitreIDs=T1003.003
+Testdata=

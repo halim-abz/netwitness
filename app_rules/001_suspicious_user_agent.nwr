@@ -1,1 +1,1 @@
-name="suspicious user agent" rule="client contains 'Moxilla','test','sample','pwn','mozila','user-agent','exploit','hack' || client begins 'asd'" alert=ioc order=182 type=application uuid=7e3a6c8a-984c-479c-afb3-dbd4bf0a7424 custom=true version=1.0 managedBy=CCM
+name="suspicious user agent" rule="client contains 'Moxilla','test','sample','pwn','mozila','user-agent','exploit','hack' || client begins 'asd'" alert=ioc order=1 type=application

@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000273
+Title=Download Suspicious File with wget-curl
+Medium=packet
+Tags=
+Description=Detects when suspicious file types typically part of WebShells, such as Linux executables, shell scripts, or web files, are downloaded over HTTP using curl or wget. The list of file extensions to monitor is configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="command and control":"ingress tool transfer"
+MitreIDs=T1105
+Testdata=

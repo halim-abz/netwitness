@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000257</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>3</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="ext_list" is_array="true">
+			<name ref="$ext_list_name"/>
+			<desc ref="$ext_list_desc"/>
+			<value type="string">rar</value>
+			<value type="string">zip</value>
+			<value type="string">7z</value>
+			<value type="string">gz</value>
+			<value type="string">bz2</value>
+			<value type="string">tar</value>
+			<value type="string">tar.gz</value>
+			<value type="string">tgz</value>
+		</variable>
+		<variable id="ip_list" is_array="true">
+			<name ref="$ip_list_name"/>
+			<desc ref="$ip_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+	</variables>
+</module>

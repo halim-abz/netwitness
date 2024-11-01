@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000278
+Title=Possible SQL Injection
+Medium=packet
+Tags=
+Description=Detects when SQL injection signatures are seen targeting internal devices (inbound or lateral) X number of times between the same source IP and the same destination IP within Y seconds. X and Y are configurable.
+Dependencies=lua:HTTP_SQL_Injection
+Discontinued=false
+risk=high
+MitreTags="initial access":"exploit public-facing application"
+MitreIDs=T1190
+Testdata=

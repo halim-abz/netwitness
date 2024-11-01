@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000251
+Title=Multiple Different HTTP 4xx Errors
+Medium=packet
+Tags=
+Description=Detects when X number of different and unique HTTP 4xx error codes are seen between the same source IP and destination IP within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="command and control":"application layer protocol"
+MitreIDs=T1071.001
+Testdata=

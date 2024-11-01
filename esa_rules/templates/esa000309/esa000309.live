@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000309
+Title=Suspicious User Agent
+Medium=packet
+Tags=
+Description=Detects the usage of a suspicious user-agent string. Must deploy 'suspicious user agent' application rule.
+Dependencies=app_rule:"suspicious user agent"
+Discontinued=false
+risk=medium
+MitreTags=
+MitreIDs=
+Testdata=

@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000289
+Title=Download Risky Filetype from Uncommon Domain
+Medium=packet
+Tags=
+Description=Detects when a risky file type is being downloaded from an uncommon domain. This requires the deployment of the "top 10k domains" feed to exclude common domains. The list of extensions to monitor is configurable.
+Dependencies=feed:top_10k_domains
+Discontinued=false
+risk=low
+MitreTags="command and control":"ingress tool transfer"
+MitreIDs=T1105
+Testdata=

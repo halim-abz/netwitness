@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000279
+Title=Possible ZeroLogon Attempt
+Medium=packet
+Tags=
+Description=Detects when a potential ZeroLogon signature has been identified.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags="lateral movement":"exploitation of remote services"
+MitreIDs=T1210
+Testdata=

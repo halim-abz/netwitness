@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000252
+Title=Communication to Same Domain with Many Subdomains
+Medium=packet
+Tags=
+Description=Detects when the same source IP tries to communicate with X number of unique different subdomains belonging to the same domain within Y seconds. X and Y are configurable.
+Dependencies=feed:top_10k_domains
+Discontinued=false
+risk=medium
+MitreTags="command and control":"application layer protocol"
+MitreIDs=T1071.004
+Testdata=

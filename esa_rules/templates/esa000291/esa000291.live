@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000291
+Title=Outbound Connection to Suspicious Certificate
+Medium=packet
+Tags=
+Description=Detects when an outbound connection to a domain using a suspicious certificate is seen. These include certificates issued in the last day, week, or expired certificates. The list of certificate anomalies is configurable (analysis.service values).
+Dependencies=feed:top_10k_domains
+Discontinued=false
+risk=low
+MitreTags="command and control":"application layer protocol"
+MitreIDs=T1071.001
+Testdata=

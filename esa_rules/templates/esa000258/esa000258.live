@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000258
+Title=Upload of Archive Direct to IP over HTTP
+Medium=packet
+Tags=
+Description=Detects when an archive file is uploaded over HTTP to a direct to IP destination. The list of file extensions to monitor is configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="exfiltration":"exfiltration over alternative protocol"
+MitreIDs=T1048.003
+Testdata=

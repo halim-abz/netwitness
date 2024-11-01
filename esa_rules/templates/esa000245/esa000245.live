@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esacom000006
+Title=Password Guessing - Protocols with Clear-Text Password
+Medium=packet
+Tags=
+Description=Detects when multiple authentication attempts from the same source IP to the same destination IP and for the same username are seen using X number of different passwords within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags="credential access":"brute force"
+MitreIDs=T1110.001
+Testdata=

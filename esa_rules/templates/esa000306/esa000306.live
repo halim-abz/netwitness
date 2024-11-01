@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000306
+Title=FirstWatch Feed Match for Inbound Traffic
+Medium=packet
+Tags=
+Description=Detects when there is a match with a FirstWatch feed for inbound traffic.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags=
+MitreIDs=
+Testdata=

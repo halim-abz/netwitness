@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000259
+Title=Exfiltration Over the Telegram API
+Medium=packet
+Tags=
+Description=Detects when either a file is uploaded using the Telegram API (if traffic is clear-text), or if a session larger than 10 MB is seen using the Telegram API (if traffic is encrypted).
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="exfiltration":"exfiltration over web service"
+MitreIDs=T1567
+Testdata=

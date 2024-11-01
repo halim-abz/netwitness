@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000290
+Title=Outbound Connection to Self-Signed Certificate
+Medium=packet
+Tags=
+Description=Detects outbound connections to domains using Self-Signed certificates.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags="command and control":"application layer protocol"
+MitreIDs=T1071.001
+Testdata=

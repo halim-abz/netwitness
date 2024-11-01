@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000262
+Title=Multiple Failed Access Attempts to Network Shares
+Medium=packet
+Tags=
+Description=Detects when X number of failed attempts to access shared network resources originating from the same source IP are identified within Y seconds.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="discovery":"network share discovery"
+MitreIDs=T1135
+Testdata=

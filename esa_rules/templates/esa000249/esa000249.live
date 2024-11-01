@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000249
+Title=Kerberoasting Cipher Downgrade
+Medium=packet
+Tags=
+Description=Detects when Kerberos is used with a weak encryption algorithm, such as RC4 or DES, commonly used as part of Kerberoasting attacks.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="credential access":"steal or forge kerberos tickets"
+MitreIDs=T1558.003
+Testdata=

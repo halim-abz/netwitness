@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000295
+Title=New SSH Outbound Destination
+Medium=packet
+Tags=
+Description=Automatically and continuously learns the outbound destination IP addresses used with SSH in the environment, and alerts whenever there is an SSH connection with a destination IP address never used over SSH in the past. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000302
+Title=New Certificate Authority
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which Certificate Authorities are seen in the environment, and alerts whenever it detects a new one that was never seen before. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000257
+Title=Upload of Archive File to FTP
+Medium=packet
+Tags=
+Description=Detects when an archive file is uploaded over FTP. List of file extensions to monitor is configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="exfiltration":"exfiltration over alternative protocol"
+MitreIDs=T1048.003
+Testdata=

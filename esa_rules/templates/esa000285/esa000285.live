@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000285
+Title=Kerberos with Disabled Account
+Medium=packet
+Tags=
+Description=Detects when authentication over Kerberos is attempted using a disabled or blocked account.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags=
+MitreIDs=
+Testdata=

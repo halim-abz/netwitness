@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000264
+Title=Suspicious PowerShell Script Download
+Medium=packet
+Tags=
+Description=Detects when a PowerShell script is downloaded over HTTP without a referrer, which may indicate being downloaded by a tool or script rather than a legitimate user.
+Dependencies=feed:top_10k_domains
+Discontinued=false
+risk=high
+MitreTags="command and control":"ingress tool transfer"
+MitreIDs=T1105
+Testdata=

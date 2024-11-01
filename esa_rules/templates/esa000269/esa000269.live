@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000269
+Title=Scheduled Task Created
+Medium=packet
+Tags=
+Description=Detects when a remote scheduled task is created.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="execution":"scheduled task/job"
+MitreIDs=T1053.005
+Testdata=

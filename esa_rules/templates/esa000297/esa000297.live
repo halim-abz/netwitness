@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000297
+Title=New Lolbas IP Destination
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which destination IP addresses have been reached using one of these tools, and alerts whenever it detects a new destination never seen before. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=feed:top_10k_domains
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000293</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>5</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="ext_list" is_array="true">
+			<name ref="$ext_list_name"/>
+			<desc ref="$ext_list_desc"/>
+			<value type="string">ps1</value>
+			<value type="string">bin</value>
+			<value type="string">bat</value>
+			<value type="string">com</value>
+			<value type="string">py</value>
+			<value type="string">pl</value>
+			<value type="string">sh</value>
+			<value type="string">pif</value>
+			<value type="string">hta</value>
+			<value type="string">vbs</value>
+			<value type="string">vb</value>
+			<value type="string">vbe</value>
+			<value type="string">ws</value>
+			<value type="string">wsf</value>
+			<value type="string">wsc</value>
+			<value type="string">wsh</value>
+			<value type="string">scr</value>
+			<value type="string">lnk</value>
+		</variable>
+		<variable id="ipsrc_list" is_array="true">
+			<name ref="$ipsrc_list_name"/>
+			<desc ref="$ipsrc_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="ipdst_list" is_array="true">
+			<name ref="$ipdst_list_name"/>
+			<desc ref="$ipdst_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+	</variables>
+</module>

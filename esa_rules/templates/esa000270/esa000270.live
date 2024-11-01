@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000270
+Title=Remote Shutdown
+Medium=packet
+Tags=
+Description=Detects when a system is remotely shut down.
+Dependencies=
+Discontinued=false
+risk=high
+MitreTags="impact":"system shutdown/reboot"
+MitreIDs=T1529
+Testdata=

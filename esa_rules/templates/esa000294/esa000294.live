@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000294
+Title=New User Agent
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which user-agent strings are seen in the environment, and generates an alert when a new user-agent is seen for the first time. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

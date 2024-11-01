@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000304
+Title=New Outbound IP with IOC
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which destination IP addresses have been linked to an IOC in the environment, and generates an alert whenever a destination IP that was never linked to any IOC in the past is now triggering an IOC for the first time. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

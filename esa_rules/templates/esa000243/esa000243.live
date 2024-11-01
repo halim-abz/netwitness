@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000243
+Title=Credential Stuffing Over SMB
+Medium=packet
+Tags=
+Description=Detects when multiple authentication attempts happen over SMB from the same source IP to the same destination IP using X different usernames within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags="credential access":"brute force"
+MitreIDs=T1110.004
+Testdata=

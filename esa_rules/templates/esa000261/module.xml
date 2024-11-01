@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000261</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>3</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="ext_list" is_array="true">
+			<name ref="$ext_list_name"/>
+			<desc ref="$ext_list_desc"/>
+			<value type="string">docm</value>
+			<value type="string">dotm</value>
+			<value type="string">xlm</value>
+			<value type="string">xlsm</value>
+			<value type="string">xltm</value>
+			<value type="string">xlam</value>
+			<value type="string">pptm</value>
+			<value type="string">potm</value>
+			<value type="string">ppsm</value>
+			<value type="string">sldm</value>
+		</variable>
+	</variables>
+</module>

@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000296
+Title=New PowerShell IP Destination
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which destination IP addresses have been reached using PowerShell, and alerts whenever it detects a new destination never seen before. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

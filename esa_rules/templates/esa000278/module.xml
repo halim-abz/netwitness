@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000278</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>5</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="time_window">
+			<name ref="$time_window_name"/>
+			<desc ref="$time_window_desc"/>
+			<value type="int">30</value>
+		</variable>
+		<variable id="count">
+			<name ref="$count_name"/>
+			<desc ref="$count_desc"/>
+			<value type="int">5</value>
+		</variable>
+		<variable id="ip_srclist" is_array="true">
+			<name ref="$ip_srclist_name"/>
+			<desc ref="$ip_srclist_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="ip_dstlist" is_array="true">
+			<name ref="$ip_dstlist_name"/>
+			<desc ref="$ip_dstlist_desc"/>
+			<value type="string"> </value>
+		</variable>
+	</variables>
+</module>

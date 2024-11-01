@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000293
+Title=Executable File Copied to Common Admin Shared Folder
+Medium=packet
+Tags=
+Description=Detects when executable files are copied to common folders on admin shares, such as in the "temp" or "programdata" directories. The list of additional file extensions to monitor is configurable.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="lateral movement":"tainted shared content"
+MitreIDs=T1080
+Testdata=

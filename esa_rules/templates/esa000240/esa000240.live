@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000240
+Title=Horizontal Network Service Discovery
+Medium=packet
+Tags=
+Description=Detects X number of sessions to the same common TCP port from the same source IP to Y different IP destinations within Z seconds. X, Y, Z, and the list of TCP Ports are configurable.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags="discovery":"network service discovery"
+MitreIDs=T1046
+Testdata=

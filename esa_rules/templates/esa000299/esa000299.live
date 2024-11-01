@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000299
+Title=New Destination for EXE Download
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which destination IP addresses executables are typically downloaded from, and alerts whenever it detects a new IP from where executables have been downloaded from for the 1st time. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

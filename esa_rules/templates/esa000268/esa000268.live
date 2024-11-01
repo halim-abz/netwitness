@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000268
+Title=Remote Service Created, Deleted, or Modified
+Medium=packet
+Tags=
+Description=Detects when a remote service is either created, modified, or deleted.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="execution":"system services"
+MitreIDs=T1569.002
+Testdata=

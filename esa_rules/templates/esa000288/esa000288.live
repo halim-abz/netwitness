@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000288
+Title=Kali Detected
+Medium=packet
+Tags=
+Description=Detects the usage of Kali based on default user-agent strings.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags=
+MitreIDs=
+Testdata=

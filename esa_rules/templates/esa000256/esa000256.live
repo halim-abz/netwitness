@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000256
+Title=Multiple Unique User Agents
+Medium=packet
+Tags=
+Description=Detects when the same source IP is seen using X number of different unique user-agent values within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags="reconnaissance":"active scanning"
+MitreIDs=T1595
+Testdata=
