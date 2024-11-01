@@ -7,6 +7,6 @@ Description=Detects when SSH is used outbound. SSH can be used to build reverse 
 Dependencies=
 Discontinued=false
 risk=low
-MitreTags="exfiltration":"exfiltration pver c2 channel"
+MitreTags="exfiltration":"exfiltration over c2 channel"
 MitreIDs=T1041
 Testdata=
