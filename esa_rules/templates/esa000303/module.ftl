@@ -31,4 +31,4 @@ OUTPUT ALL EVERY ${group_hours?c} hours;
 //Every day, clear values older than x days
 ON PATTERN [every timer:interval(1 day)]
 DELETE FROM NewSSHClient
-WHERE time < current_timestamp.minus(${phaseout_days?c);
+WHERE time < current_timestamp.minus(${phaseout_days?c});
