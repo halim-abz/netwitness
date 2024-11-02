@@ -1,9 +1,10 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
+<#if module_debug>@Audit('stream')</#if>
+@Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src","ip_dst","client"})
 
 SELECT * FROM 
@@ -20,7 +21,7 @@ SELECT * FROM
 		AND	ip_dst NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
 		<#if domain_list[0].value != "">
-		AND	domain NOT IN (<@buildList inputlist=domain_list/>)
+		AND	(domain IS NULL OR domain NOT IN (<@buildList inputlist=domain_list/>))
 		</#if>
 		<#if top10kfeed_enabled == "yes">
 		AND 'top 10k domain' != ALL( analysis_session )
@@ -57,7 +58,7 @@ SELECT * FROM
 <#macro buildAgentList inputlist>
 	<@compress single_line=true>
 	<#list inputlist as v>
-		client LIKE '%${v.value}%'
+		matchLike(user_agent, '%${v.value}%')
 		<#if v_has_next> OR </#if>
 	</#list>
 	</@compress>

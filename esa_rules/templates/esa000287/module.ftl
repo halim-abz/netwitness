@@ -1,5 +1,5 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 

@@ -1,9 +1,10 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
+<#if module_debug>@Audit('stream')</#if>
+@Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src"})
 
 SELECT * FROM 
@@ -13,7 +14,7 @@ SELECT * FROM
 		AND direction = 'outbound'
 		AND isOneOfIgnoreCase(action,{'put'}) 
 		<#if ext_list[0].value != "">
-		AND extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)
+		AND filetype IN (<@buildList inputlist=ext_list/>)
 		</#if>
 		<#if ip_list[0].value != "">
 		AND ip_dst NOT IN (<@buildList inputlist=ip_list/>)

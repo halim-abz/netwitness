@@ -1,9 +1,10 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
+<#if module_debug>@Audit('stream')</#if>
+@Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src"})
 
 SELECT * FROM 
@@ -14,7 +15,7 @@ SELECT * FROM
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
-	) group by ip_src output first every 5 min;
+	) group by ip_src output first every 30 min;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

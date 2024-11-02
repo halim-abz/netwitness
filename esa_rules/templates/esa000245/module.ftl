@@ -1,9 +1,11 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
+<#if module_debug>@Audit('stream')</#if>
+@Hint('reclaim_group_aged=${time_window*2}')
+@Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src", "ip_dst", "service", "username"})
 
 SELECT * FROM 
@@ -18,7 +20,7 @@ SELECT * FROM
 		<#if user_list[0].value != "">
 		AND	isNotOneOfIgnoreCase(username,{<@buildList inputlist=user_list/>})
 		</#if>
-	).std:groupwin(ip_src,ip_dst,service,username).win:time_length_batch(${time_window?c} seconds, ${count?c}).std:unique(password) group by ip_src,ip_dst,service,username having count(*) = ${count?c};
+	).std:groupwin(ip_src,ip_dst,service,username).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(password) group by ip_src,ip_dst,service,username having count(*) >= ${count?c} output first every 30 min;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

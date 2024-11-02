@@ -1,15 +1,16 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
-@RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src", "ip_dst", "service", "ad_username_src"})
+<#if module_debug>@Audit('stream')</#if>
+@Hint('reclaim_group_aged=${time_window*2}')
+@Name('${module_id}_Alert')
+@RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src", "ip_dst", "service", "ad_username_src","username"})
 
 SELECT * FROM 
 	Event(
 		medium = 1
-		AND ad_username_src IS NOT NULL
 		AND isOneOfIgnoreCase(error,{ 'kdc err preauth failed' , 'logon failure' })
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
@@ -17,7 +18,7 @@ SELECT * FROM
 		<#if user_list[0].value != "">
 		AND ad_username_src NOT IN (<@buildList inputlist=user_list/>)
 		</#if>
-	).std:groupwin(ip_src,ip_dst,service,ad_username_src).win:time_length_batch(${time_window?c} seconds, ${count?c}) group by ip_src,ip_dst,service,ad_username_src having count(*) = ${count?c};
+	).std:groupwin(ip_src,ip_dst,service,ad_username_src,username).win:time_length_batch(${time_window?c} seconds, ${count*2}) group by ip_src,ip_dst,service,ad_username_src,username having count(*) >= ${count?c} output first every 30 min;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

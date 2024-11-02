@@ -1,9 +1,9 @@
 ResourceType=esaRule
 FileName=esa000258
-Title=Upload of Archive Direct to IP over HTTP
+Title=Upload of Archive over HTTP
 Medium=packet
 Tags=
-Description=Detects when an archive file is uploaded over HTTP to a direct to IP destination. The list of file extensions to monitor is configurable.
+Description=Detects when an archive file is uploaded over HTTP. The list of filetypes to monitor is configurable.
 Dependencies=
 Discontinued=false
 risk=medium

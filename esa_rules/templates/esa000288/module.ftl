@@ -1,16 +1,20 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
+<#if module_debug>@Audit('stream')</#if>
+@Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src"})
 
 SELECT * FROM 
 	Event(
 	    medium = 1
-		AND isOneOfIgnoreCase(host_src,{ 'kali' })
-		AND client.toLowerCase() LIKE '%kali%'
+		AND (
+			isOneOfIgnoreCase(host_src,{ 'kali' })
+			OR isOneOfIgnoreCase(alias_host,{ 'kali' })
+			OR client.toLowerCase() LIKE '%kali%'
+		)
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>

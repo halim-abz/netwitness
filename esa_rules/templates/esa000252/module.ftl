@@ -1,9 +1,11 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
+<#if module_debug>@Audit('stream')</#if>
+@Hint('reclaim_group_aged=${time_window*2}')
+@Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src", "domain","service"})
 
 SELECT * FROM 
@@ -26,7 +28,7 @@ SELECT * FROM
 		<#if top10kfeed_enabled == "yes">
 		AND 'top 10k domain' != ALL( analysis_session )
 		</#if>
-	).std:groupwin(ip_src,domain,service).win:time_length_batch(${time_window?c} seconds, ${count?c}).std:unique(alias_host) group by ip_src,domain,service having count(*) = ${count?c};
+	).std:groupwin(ip_src,domain,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(alias_host) group by ip_src,domain,service having count(*) >= ${count?c} output first every 30 min;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

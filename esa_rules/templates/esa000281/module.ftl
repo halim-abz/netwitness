@@ -1,9 +1,10 @@
 /*
-Version: 1
+Version: ${revision}
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>@Name('${module_id}_Alert')
+<#if module_debug>@Audit('stream')</#if>
+@Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src"})
 
 SELECT * FROM 
@@ -11,7 +12,7 @@ SELECT * FROM
 		medium = 1
 		AND direction = 'outbound'
 		AND streams = 2
-		AND 'dan.me tor exit nodes' = ALL( ioc )
+		AND 'dan.me Tor Exit Nodes' = ALL( ioc )
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
