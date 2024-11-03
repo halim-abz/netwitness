@@ -11,7 +11,7 @@ SELECT * FROM
 	Event(
 	    medium = 1
 		AND direction = 'outbound'
-		AND org_dst NOT IN ('Akamai Technologies')
+		AND (org_dst IS NULL OR org_dst NOT IN ('Akamai Technologies'))
 		<#if cert_list[0].value != "">
 		AND (<@buildCertList inputlist=cert_list/>)
 		</#if>

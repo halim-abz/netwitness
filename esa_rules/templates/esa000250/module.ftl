@@ -14,7 +14,7 @@ SELECT * FROM
 		AND	service = 53
 		AND	dns_querytype IN ('a record')
 		AND	alias_host.size() = 1
-		AND	error IN ( 'no name' )
+		AND	error IN ('no name')
 		<#if tld_list[0].value != "">
 		AND	tld NOT IN (<@buildList inputlist=tld_list/>)
 		</#if>
