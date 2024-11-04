@@ -2,7 +2,7 @@
 esa000240,Horizontal Network Service Discovery,T1046,Discovery,Network Service Discovery,-
 esa000241,Network Password Spraying,T1110.003,Credential Access,Brute Force,Password Spraying
 esa000242,Credential Stuffing,T1110.004,Credential Access,Brute Force,Credential Stuffing
-esa000243,Credential Stuffing Over SMB,T1110.004,Credential Access,Brute Force,Credential Stuffing
+esa000243,placeholder,,,,
 esa000244,Kerberos Account Scanning,T1087,Discovery,Account Discovery,-
 esa000245,Password Guessing - Protocols with Clear-Text Password,T1110.001,Credential Access,Brute Force,Password Guessing
 esa000246,Password Guessing - Protocol with Error Message,T1110.001,Credential Access,Brute Force,Password Guessing
@@ -34,7 +34,7 @@ esa000271,Windows Event Logs Cleared,T1070.001,Defense Evasion,Indicator Removal
 esa000272,Possible Lateral Movement Over SMB,T1021.002,Lateral Movement,Remote Services,SMB/Windows Admin Shares
 esa000273,Download Suspicious File with wget-curl,T1105,Command and Control,Ingress Tool Transfer,-
 esa000274,BITS job Downloads Executable,T1105,Command and Control,Ingress Tool Transfer,-
-esa000275,HTTP POST Direct to IP with Archive File,T1048,Exfiltration,Exfiltration Over Alternative Protocol,-
+esa000275,placeholder,,,,
 esa000276,NTDS Accessible over SMB,T1003.003,Credential Access,OS Credential Dumping,NTDS
 esa000277,VNC with no Authentication Required,T1021.005,Lateral Movement,Remote Services,VNC
 esa000278,Possible SQL Injection,T1190,Initial Access,Exploit Public-Facing Application,-
