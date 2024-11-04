@@ -1,0 +1,1 @@
+name="rdp with sensitive account" rule="service = 3389 && (username begins 'admin','svc' || username contains 'adm' || username ends '$')" alert=boc order=1 type=application

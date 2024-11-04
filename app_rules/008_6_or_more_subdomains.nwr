@@ -1,0 +1,1 @@
+name="6 or more subdomains" rule="alias.host regex '([\\\\.].*){6,}'" alert=analysis.service order=1 type=application

@@ -1,0 +1,1 @@
+name="large subdomain" rule="alias.host regex '([^\\\\.]){30,}.'" alert=analysis.service order=1 type=application

@@ -1,0 +1,1 @@
+name="filename with multiple spaces" rule="filename contains '  ' || attachment contains '  '" alert=analysis.file order=1 type=application
