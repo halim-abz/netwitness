@@ -10,5 +10,5 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 		medium = 1
-		AND isOneOfIgnoreCase(error,{ 'kdc err client revoked' })
+		AND error.toLowerCase() IN ('kdc err client revoked')
 	).std:unique(ip_src) group by ip_src output first every 30 min;

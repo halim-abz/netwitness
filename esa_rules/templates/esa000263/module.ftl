@@ -12,7 +12,6 @@ SELECT * FROM
 		medium = 1
 		AND service = 389
 		AND payload > 524288
-		AND 'long connection' = ANY( analysis_session )
 		<#if dc_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=dc_list/>)
 		</#if>

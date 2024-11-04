@@ -11,12 +11,11 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 		medium = 1
-		AND	error IN ( 'kdc err c principal unknown' )
-		AND	ad_username_dst IS NOT NULL
+		AND	error.toLowerCase() IN ( 'kdc err c principal unknown' )
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
-	).std:groupwin(ip_src).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(ad_username_dst) group by ip_src having count(*) >= ${count?c} output first every 30 min;
+	).std:groupwin(ip_src).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(ad_username_src) group by ip_src having count(*) >= ${count?c} output first every 30 min;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

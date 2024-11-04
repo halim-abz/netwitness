@@ -13,7 +13,8 @@ SELECT * FROM
 		medium = 1
 		AND	service = 80
 		AND	direction = 'inbound'
-		AND  'http post no get no referer' = ANY( analysis_service )
+		AND  'http post no get' = ANY( analysis_service )
+		AND referer IS NULL
 		<#if ip_list[0].value != "">
 		AND	ip_dst NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>

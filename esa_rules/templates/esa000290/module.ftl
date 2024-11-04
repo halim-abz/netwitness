@@ -11,7 +11,7 @@ SELECT * FROM
 	Event(
 	    medium = 1
 		AND direction = 'outbound'
-		AND 'ssl certificate self-signed' = ANY(analysis_service)
+		AND 'SSL certificate self-signed' = ANY(analysis_service)
 		<#if domain_list[0].value != "">
 		AND (domain IS NULL OR domain NOT IN (<@buildList inputlist=domain_list/>))
 		</#if>

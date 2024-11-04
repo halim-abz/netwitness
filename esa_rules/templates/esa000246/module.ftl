@@ -11,7 +11,7 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 		medium = 1
-		AND isOneOfIgnoreCase(error,{ 'kdc err preauth failed' , 'logon failure' })
+		AND error.toLowerCase() IN ('kdc err preauth failed' , 'logon failure')
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
