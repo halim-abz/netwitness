@@ -14,7 +14,7 @@ SELECT * FROM
 		AND
 		service = 139
 		AND
-		error IN ( 'access denied' )
+		error.toLowerCase() IN ( 'access denied' )
 		<#if ip_list[0].value != "">
 		AND
 		ip_src NOT IN (<@buildList inputlist=ip_list/>)

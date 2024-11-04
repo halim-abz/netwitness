@@ -12,7 +12,6 @@ SELECT * FROM
 		medium = 1
 		AND service IN (25,110,143,209,220,465,587,993,995)
 		AND extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)
-		AND (<@buildList inputlist=ext_list/>)
 		<#if ext_list[0].value == "">
 		AND extension.toLowerCase() IN ('one')
 		</#if>

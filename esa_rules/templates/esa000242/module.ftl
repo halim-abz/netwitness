@@ -14,12 +14,13 @@ SELECT * FROM
 		AND service IS NOT NULL
 		AND (
 			username IS NOT NULL
+			OR ad_username_src IS NOT NULL
 			OR service = 3389
 		)
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
-	).std:groupwin(ip_src,ip_dst,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(username) group by ip_src, ip_dst, service having count(*) >= ${count?c} output first every 30 min;
+	).std:groupwin(ip_src,ip_dst,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(username,ad_username_src) group by ip_src, ip_dst, service having count(*) >= ${count?c} output first every 30 min;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>
