@@ -8,7 +8,7 @@ module ${module_id};
 @Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src","ip_dst","service"})
 
-SELECT * FROM 
+SELECT window(*) FROM 
 	Event(
 		medium = 1
 		AND	(username IS NOT NULL OR ad_username_src IS NOT NULL)

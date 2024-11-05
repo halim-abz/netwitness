@@ -8,7 +8,7 @@ module ${module_id};
 @Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${module_suppress?c})
 
-SELECT * FROM 
+SELECT window(*) FROM 
 	Event(
 		medium = 1
 		AND	error.toLowerCase() IN ( 'kdc err c principal unknown' )
