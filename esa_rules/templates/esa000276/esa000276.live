@@ -1,12 +1,12 @@
 ResourceType=esaRule
 FileName=esa000276
-Title=NTDS Accessible Over SMB
+Title=FirstWatch Feed Match for Inbound Traffic
 Medium=packet
 Tags=
-Description=Detects when the "NTDS.dit" file is accessible over SMB.
+Description=Detects when there is a match with a FirstWatch feed for inbound traffic.
 Dependencies=
 Discontinued=false
 risk=high
-MitreTags="credential access":"os credential dumping"
-MitreIDs=T1003.003
+MitreTags=
+MitreIDs=
 Testdata=

@@ -1,10 +1,10 @@
 ResourceType=esaRule
 FileName=esa000305
-Title=FirstWatch Feed Match for Outbound Traffic
+Title=Hacktool User Agent
 Medium=packet
 Tags=
-Description=Detects when there is a match with a FirstWatch feed for outbound traffic.
-Dependencies=
+Description=Detects the usage of a hacking tool based on known user-agent strings. Must deploy 'hacktool user agent' application rule.
+Dependencies=app_rule:"hacktool user agent"
 Discontinued=false
 risk=high
 MitreTags=

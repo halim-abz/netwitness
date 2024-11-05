@@ -1,12 +1,12 @@
 ResourceType=esaRule
 FileName=esa000306
-Title=FirstWatch Feed Match for Inbound Traffic
+Title=Suspicious User Agent
 Medium=packet
 Tags=
-Description=Detects when there is a match with a FirstWatch feed for inbound traffic.
-Dependencies=
+Description=Detects the usage of a suspicious user-agent string. Must deploy 'suspicious user agent' application rule.
+Dependencies=app_rule:"suspicious user agent"
 Discontinued=false
-risk=high
+risk=medium
 MitreTags=
 MitreIDs=
 Testdata=

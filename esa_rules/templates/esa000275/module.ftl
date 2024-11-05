@@ -9,13 +9,17 @@ module ${module_id};
 
 SELECT * FROM 
 	Event(
-	    medium = 1
-		AND 'hacktool user agent' = ALL( ioc )
-		<#if useragent_list[0].value != "">
-		AND client NOT IN (<@buildList inputlist=useragent_list/>)
+        direction = 'outbound'
+        AND (
+            'firstwatch-malware-c2-ip' = ANY( feed_name )
+            OR 'firstwatch-malware-c2-domain' = ANY( feed_name )
+            OR 'firstwatch-malware-c2-hash' = ANY( feed_name )
+        )
+		<#if ipdst_list[0].value != "">
+		AND ip_dst NOT IN (<@buildList inputlist=ipdst_list/>)
 		</#if>
-		<#if ip_list[0].value != "">
-		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
+		<#if ipsrc_list[0].value != "">
+		AND ip_src NOT IN (<@buildList inputlist=ipsrc_list/>)
 		</#if>
 	).std:unique(ip_src) group by ip_src output first every 30 min;
 
