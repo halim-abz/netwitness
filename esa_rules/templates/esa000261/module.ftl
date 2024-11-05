@@ -9,9 +9,8 @@ module ${module_id};
 
 SELECT * FROM 
 	Event(
-		<#if ext_list[0].value != "">
-		extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)
-		</#if>
+		attachment exists
+		AND extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)
 	).std:unique(ip_src) group by ip_src output first every 30 min;
 
 <#macro buildList inputlist>

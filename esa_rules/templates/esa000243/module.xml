@@ -4,7 +4,7 @@
 	<name ref="$module_name"/>
 	<desc ref="$module_desc"/>
 	<type>ootb</type>
-	<severity>5</severity>
+	<severity>8</severity>
 	<enabled>false</enabled>
 	<last_modified>1727358727</last_modified>
 	<revision>1</revision>

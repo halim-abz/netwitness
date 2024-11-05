@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000308
+Title=Email with Probable Malicious Attachment
+Medium=packet
+Tags=
+Description=Detects when an suspicious filetype is attached to an email.
+Dependencies=
+Discontinued=false
+risk=medium
+MitreTags="initial access":"phishing"
+MitreIDs=T1566.001
+Testdata=
