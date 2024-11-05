@@ -18,7 +18,7 @@
 			<name ref="$agent_list_name"/>
 			<desc ref="$agent_list_desc"/>
 			<value type="string">Microsoft BITS</value>
-			<value type="string">certutil</value>
+			<value type="string">CertUtil</value>
 			<value type="string">Microsoft Office</value>
 		</variable>
 		<variable id="ext_list" is_array="true">
