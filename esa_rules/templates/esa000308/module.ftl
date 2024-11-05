@@ -10,5 +10,5 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 		medium = 1
-		AND 'Highly Probabld Malicious Attachment' = ALL( boc )
+		AND 'Highly Probable Malicious Attachment' = ALL( boc )
 	).std:unique(ip_src,attachment) group by ip_src,attachment output first every 30 min;
