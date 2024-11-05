@@ -10,9 +10,10 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 	    medium = 1
-	    AND service IN ( 135, 139 )
-	    AND 'create remote service' = ANY(boc)
-	    AND 'start remote service' = ANY(boc)
+	    AND (
+			(service IN ( 135, 139 ) AND 'create remote service' = ANY(boc)	AND 'start remote service' = ANY(boc))
+			OR ('psexec remote execution' = ANY(ioc))
+		)
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
