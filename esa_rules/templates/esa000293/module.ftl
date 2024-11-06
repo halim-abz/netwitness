@@ -16,6 +16,7 @@ SELECT * FROM
 		AND (
 			(asStringArray(directory)).anyOf(v => v.toLowerCase().contains('windows\\\\temp'))
 			OR (asStringArray(directory)).anyOf(v => v.toLowerCase().contains('programdata'))
+			OR (asStringArray(directory)).anyOf(v => v.toLowerCase().contains('users\\\\public'))
 		)
 		AND (
 			filetype IN ( 'windows executable','windows_executable','windows installer','windows installer msi','windows_dll','windows dll','cab','x86 pe','x86_pe','x64 pe' )

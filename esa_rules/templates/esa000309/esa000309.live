@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000309
+Title=Typical Lateral Service Seen in Outbound Direction
+Medium=packet
+Tags=
+Description=Detects protocols used in an outbound direction and that are typically intended to be used only laterally. These protocols should typically be blocked from going outbound. The list of services to monitor is configurable (use comma separated list of service number).
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

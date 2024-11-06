@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000314
+Title=Executable Propagation to Multiple Destinations
+Medium=packet
+Tags=
+Description=Detects when an executable is copied over SMB from the same source IP address to X number of unique destinations within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

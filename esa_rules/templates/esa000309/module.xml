@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000309</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>1</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="ipsrc_list" is_array="true">
+			<name ref="$ipsrc_list_name"/>
+			<desc ref="$ipsrc_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="ipdst_list" is_array="true">
+			<name ref="$ipdst_list_name"/>
+			<desc ref="$ipdst_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="port_list" is_array="true">
+			<name ref="$port_list_name"/>
+			<desc ref="$port_list_desc"/>
+			<value type="int">67</value>
+			<value type="int">88</value>
+			<value type="int">135</value>
+			<value type="int">137</value>
+			<value type="int">138</value>
+			<value type="int">139</value>
+			<value type="int">389</value>
+			<value type="int">3389</value>
+		</variable>
+	</variables>
+</module>

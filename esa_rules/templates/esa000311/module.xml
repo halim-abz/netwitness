@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000311</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>1</severity>
+	<enabled>false</enabled>
+	<last_modified>1727358727</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="ipsrc_list" is_array="true">
+			<name ref="$ipsrc_list_name"/>
+			<desc ref="$ipsrc_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="ipdst_list" is_array="true">
+			<name ref="$ipdst_list_name"/>
+			<desc ref="$ipdst_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="usercontains_list" is_array="true">
+			<name ref="$usercontains_list_name"/>
+			<desc ref="$usercontains_list_desc"/>
+			<value type="int">admin</value>
+			<value type="int">root</value>
+		</variable>
+		<variable id="userbegins_list" is_array="true">
+			<name ref="$userbegins_list_name"/>
+			<desc ref="$userbegins_list_desc"/>
+			<value type="int">svc</value>
+		</variable>
+		<variable id="userends_list" is_array="true">
+			<name ref="$userends_list_name"/>
+			<desc ref="$userends_list_desc"/>
+			<value type="int">$</value>
+		</variable>
+		<variable id="userwhite_list" is_array="true">
+			<name ref="$userwhite_list_name"/>
+			<desc ref="$userwhite_list_desc"/>
+			<value type="int"> </value>
+		</variable>
+	</variables>
+</module>

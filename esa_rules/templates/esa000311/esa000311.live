@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000311
+Title=RDP with Sensitive Account
+Medium=packet
+Tags=
+Description=Detects when a user attempts to connect over RDP using a sensitive account. The strings to define a sensitive account are configurable.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=
