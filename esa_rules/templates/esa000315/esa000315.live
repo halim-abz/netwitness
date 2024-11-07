@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000315
+Title=Many Kerberos TGS Requests
+Medium=packet
+Tags=
+Description=Detects when X number of Kerberos TGS tickets are requested by the same source IP within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags="credential access":"steal or forge kerberos tickets"
+MitreIDs=T1558.003
+Testdata=

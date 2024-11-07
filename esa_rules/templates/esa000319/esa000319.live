@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000319
+Title=New User Requesting TGS Ticket for krbtgt Service
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which usernames typically request Kerberos TGS tickets for the krbtgt service, and alerts whenever it detects a new user that never did this before. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=

@@ -3,7 +3,8 @@ Version: 2
 */
 module ${module_id};
 
-<#if module_debug>@Audit('stream')</#if>//Update learning phase to desired number of days
+<#if module_debug>@Audit('stream')</#if>
+//Window to store timestamp for learning phase
 CREATE WINDOW NewSSHClient_learning.win:length(1) (learningPhase long);
 INSERT INTO NewSSHClient_learning
 SELECT current_timestamp.plus(${learning_days?c} days) as learningPhase FROM PATTERN[Event];

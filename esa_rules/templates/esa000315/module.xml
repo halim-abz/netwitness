@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module xmlns="http://www.netwitness.com/rta/1.0">
-	<id>esa000314</id>
+	<id>esa000315</id>
 	<name ref="$module_name"/>
 	<desc ref="$module_desc"/>
 	<type>ootb</type>
@@ -17,7 +17,7 @@
 		<variable id="count">
 			<name ref="$count_name"/>
 			<desc ref="$count_desc"/>
-			<value type="int">10</value>
+			<value type="int">20</value>
 		</variable>
 		<variable id="ip_list" is_array="true">
 			<name ref="$ip_list_name"/>

@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000317
+Title=New Destination for TGS Requests
+Medium=packet
+Tags=
+Description=Automatically and continuously learns which destination IP addresses for which Kerberos TGS tickets are typically requesed for, and alerts whenever it detects a new source that never did this before. The rule is configurable, allowing to change the initial learning period and when existing values are phased out.
+Dependencies=
+Discontinued=false
+risk=low
+MitreTags=
+MitreIDs=
+Testdata=
