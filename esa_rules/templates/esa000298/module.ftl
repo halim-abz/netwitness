@@ -14,7 +14,7 @@ SELECT current_timestamp.plus(${learning_days?c} days) as learningPhase FROM PAT
 CREATE WINDOW NewPS1Download.win:keepall().std:unique(ip_src) (ip_src string, time long);
 
 //For incoming events, if value already exists, update timestamp, if not, create new entry
-ON Event(filename IS NOT NULL AND direction = 'outbound' AND extension.toLowerCase() LIKE 'ps1') as e
+ON Event(filename IS NOT NULL AND direction = 'outbound' AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('ps1'))) as e
 MERGE NewPS1Download as w
 WHERE w.ip_src = e.ip_src
 WHEN MATCHED
@@ -25,7 +25,7 @@ WHEN NOT MATCHED
 //Compare to ip_src stored in the window
 @RSAAlert
 SELECT *
-FROM Event(ip_src NOT IN (SELECT ip_src FROM NewPS1Download) AND filename IS NOT NULL AND direction = 'outbound' AND extension.toLowerCase() LIKE 'ps1'
+FROM Event(ip_src NOT IN (SELECT ip_src FROM NewPS1Download) AND filename IS NOT NULL AND direction = 'outbound' AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('ps1'))
 AND current_timestamp > (SELECT learningPhase FROM NewPS1Download_learning))
 OUTPUT ALL EVERY ${group_hours?c} hours;
 

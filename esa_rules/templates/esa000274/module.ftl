@@ -14,7 +14,7 @@ SELECT * FROM
 	    AND matchLike(user_agent, 'Microsoft BITS%')
 	    AND direction = 'outbound'
 	    AND (
-        	extension = 'exe' 
+        	asStringArray(extension).anyOf(v => v.toLowerCase() IN ('exe')) 
         	OR 'exe filetype' = ANY(analysis_file)
         	OR filetype = 'windows executable'
     	)

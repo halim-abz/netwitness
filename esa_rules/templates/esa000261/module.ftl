@@ -10,7 +10,7 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 		attachment IS NOT NULL
-		AND extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)
+		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
 	).std:unique(ip_src) group by ip_src output first every 30 min;
 
 <#macro buildList inputlist>

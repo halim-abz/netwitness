@@ -12,7 +12,7 @@ SELECT * FROM
 	    medium = 1
 		AND direction = 'outbound'
 		<#if ext_list[0].value != "">
-		AND extension IN (<@buildList inputlist=ext_list/>)
+		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
 		</#if>
 		<#if agent_list[0].value != "">
 		AND (<@buildAgentList inputlist=agent_list/>)

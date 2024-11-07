@@ -21,7 +21,7 @@ SELECT * FROM
 		AND 'libcurl' != ALL(user_agent)
 		AND (
 			filetype = 'elf executable'
-			<#if ext_list[0].value != "">OR extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)</#if>
+			<#if ext_list[0].value != "">OR asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))</#if>
 		)
 		<#if ip_list[0].value != "">
 		AND ip_dst NOT IN (<@buildList inputlist=ip_list/>)

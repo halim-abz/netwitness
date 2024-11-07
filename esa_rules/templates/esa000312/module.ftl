@@ -15,7 +15,7 @@ SELECT * FROM
 		AND (
 			<@buildFileContainsList inputlist=filecontains_list/>
 		)
-		AND extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)
+		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
 		<#if filewhite_list[0].value != "">
 		AND (
 			<@buildFileWhiteContainsList inputlist=filewhite_list/>

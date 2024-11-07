@@ -14,7 +14,7 @@ SELECT * FROM
 		AND direction = 'outbound'
 		AND 'get' = ANY( action ) 
 		AND 'http no referer' = ANY(analysis_service)
-		AND extension.toLowerCase() IN ( 'psm1','ps1','ps' )
+		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('psm1','ps1','ps'))
 		<#if top10kfeed_enabled == "yes">
 		AND 'top 10k domain' != ALL( analysis_session )
 		</#if>

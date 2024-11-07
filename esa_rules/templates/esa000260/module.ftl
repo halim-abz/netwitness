@@ -11,9 +11,9 @@ SELECT * FROM
 	Event(
 		medium = 1
 		AND service IN (25,110,143,209,220,465,587,993,995)
-		AND extension.toLowerCase() IN (<@buildList inputlist=ext_list/>)
+		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
 		<#if ext_list[0].value == "">
-		AND extension.toLowerCase() IN ('one')
+		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('one'))
 		</#if>
 	).std:unique(ip_src) group by ip_src output first every 30 min;
 
