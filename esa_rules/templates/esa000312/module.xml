@@ -22,21 +22,21 @@
 		<variable id="filecontains_list" is_array="true">
 			<name ref="$filecontains_list_name"/>
 			<desc ref="$filecontains_list_desc"/>
-			<value type="int">passw</value>
+			<value type="string">passw</value>
 		</variable>
 		<variable id="filewhite_list" is_array="true">
 			<name ref="$filewhite_list_name"/>
 			<desc ref="$filewhite_list_desc"/>
-			<value type="int"> </value>
+			<value type="string"> </value>
 		</variable>
 		<variable id="ext_list" is_array="true">
 			<name ref="$ext_list_name"/>
 			<desc ref="$ext_list_desc"/>
-			<value type="int">txt</value>
-			<value type="int">xls</value>
-			<value type="int">xlsx</value>
-			<value type="int">doc</value>
-			<value type="int">docs</value>
+			<value type="string">txt</value>
+			<value type="string">xls</value>
+			<value type="string">xlsx</value>
+			<value type="string">doc</value>
+			<value type="string">docs</value>
 		</variable>
 	</variables>
 </module>

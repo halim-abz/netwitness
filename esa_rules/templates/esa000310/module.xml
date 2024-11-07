@@ -22,23 +22,23 @@
 		<variable id="usercontains_list" is_array="true">
 			<name ref="$usercontains_list_name"/>
 			<desc ref="$usercontains_list_desc"/>
-			<value type="int">admin</value>
-			<value type="int">root</value>
+			<value type="string">admin</value>
+			<value type="string">root</value>
 		</variable>
 		<variable id="userbegins_list" is_array="true">
 			<name ref="$userbegins_list_name"/>
 			<desc ref="$userbegins_list_desc"/>
-			<value type="int">svc</value>
+			<value type="string">svc</value>
 		</variable>
 		<variable id="userends_list" is_array="true">
 			<name ref="$userends_list_name"/>
 			<desc ref="$userends_list_desc"/>
-			<value type="int">$</value>
+			<value type="string">$</value>
 		</variable>
 		<variable id="userwhite_list" is_array="true">
 			<name ref="$userwhite_list_name"/>
 			<desc ref="$userwhite_list_desc"/>
-			<value type="int"> </value>
+			<value type="string"> </value>
 		</variable>
 	</variables>
 </module>
