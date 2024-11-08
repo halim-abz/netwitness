@@ -15,7 +15,7 @@ SELECT * FROM
 		AND (<@buildAgentList inputlist=agent_list/>)
 		</#if>
 		<#if ext_list[0].value != "">
-		AND (<@buildExtList inputlist=ext_list/>)
+		AND	asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
 		</#if>
 		<#if ip_list[0].value != "">
 		AND	ip_dst NOT IN (<@buildList inputlist=ip_list/>)
@@ -44,15 +44,6 @@ SELECT * FROM
 		|| value.type?starts_with("long") || value.type?starts_with("float") || value.type?starts_with("int")>
 		${value.value?c}	
 	</#if>
-</#macro>
-
-<#macro buildExtList inputlist>
-	<@compress single_line=true>
-	<#list inputlist as v>
-		filename.toLowerCase() LIKE '%.${v.value}'
-		<#if v_has_next> OR </#if>
-	</#list>
-	</@compress>
 </#macro>
 
 <#macro buildAgentList inputlist>

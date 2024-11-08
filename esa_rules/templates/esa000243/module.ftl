@@ -11,5 +11,5 @@ SELECT * FROM
 	Event(
 		medium = 1
 		AND service = 139
-		AND filename.toLowerCase() IN ('ntds.dit')
+		AND asStringArray(filename).anyOf(v => v.toLowerCase() IN ('ntdis.dit'))
 	).std:unique(ip_src) group by ip_src output first every 30 min;
