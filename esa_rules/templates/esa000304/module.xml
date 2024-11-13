@@ -12,7 +12,7 @@
 		<variable id="learning_days">
 			<name ref="$learning_days_name"/>
 			<desc ref="$learning_days_desc"/>
-			<value type="int">1</value>
+			<value type="int">7</value>
 		</variable>
 		<variable id="group_hours">
 			<name ref="$group_hours_name"/>
