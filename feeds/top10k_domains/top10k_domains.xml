@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FDF xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="feed-definitions.xsd">
+
+  <FlatFileFeed name="Top 10k Domains" 
+             path="top10k_domains.csv"
+             separator=","
+             comment="#">
+ <MetaCallback name="domain" valuetype="Text" ignorecase="true" apptype="0">
+   <Meta name="domain"/>
+ </MetaCallback>
+  
+ <LanguageKeys>
+   <LanguageKey name="analysis.session" valuetype="Text"/>
+ </LanguageKeys>
+ <Fields>
+   <Field index="1" type="index" key="domain"/>
+   <Field index="2" type="value" key="analysis.session" />
+ </Fields>
+</FlatFileFeed>
+
+</FDF>

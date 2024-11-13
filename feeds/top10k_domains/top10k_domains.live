@@ -1,0 +1,8 @@
+ResourceType=feed
+FileName=top10k_domains
+Title=Top 10k Domains
+Medium=log,packet
+Tags=
+Description=List of top 10K global domains
+Dependencies=
+Discontinued=false

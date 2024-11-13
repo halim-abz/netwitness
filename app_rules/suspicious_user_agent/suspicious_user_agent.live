@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=suspicious_user_agent
+Title=Suspicious User-Agent
+Medium=packet,log
+Tags=
+Description=Identifies suspicious user-agent strings.
+Dependencies=
+Discontinued=false
+Risk=medium
+MitreTags=
