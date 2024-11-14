@@ -1,5 +1,5 @@
 /*
-Version: 1
+Version: 2
 */
 module ${module_id};
 
@@ -11,5 +11,5 @@ SELECT * FROM
 	Event(
 		medium = 1
 		AND service = 139
-		AND asStringArray(filename).anyOf(v => v.toLowerCase() IN ('ntdis.dit'))
+		AND asStringArray(filename).anyOf(v => v.toLowerCase() IN ('ntds.dit'))
 	).std:unique(ip_src) group by ip_src output first every 30 min;

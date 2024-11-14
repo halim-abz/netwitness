@@ -1,5 +1,5 @@
 /*
-Version: 1
+Version: 2
 */
 module ${module_id};
 
@@ -10,23 +10,16 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 		attachment IS NOT NULL
-		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
+		AND (
+			asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%docm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%dotm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%xlm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%xlsm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%xltm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%xlam'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%pptm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%potm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%ppsm'))
+			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%sldm'))
+		)
 	).std:unique(ip_src) group by ip_src output first every 30 min;
-
-<#macro buildList inputlist>
-	<@compress single_line=true>
-	<#list inputlist as v>
-		<@buildScalar value=v/>
-		<#if v_has_next>,</#if>	
-	</#list>
-	</@compress>
-</#macro>
-
-<#macro buildScalar value>
-	<#if value.type?starts_with("string")>
-		'${value.value}'
-	<#elseif value.type?starts_with("short") || value.type?starts_with("integer") 
-		|| value.type?starts_with("long") || value.type?starts_with("float") || value.type?starts_with("int")>
-		${value.value?c}	
-	</#if>
-</#macro>

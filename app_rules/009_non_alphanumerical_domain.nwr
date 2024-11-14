@@ -1,0 +1,1 @@
+name="non-alphanumerical domain" rule="service = 80,443,53 && alias.host regex '[^a-zA-Z0-9.\\\-_]'" alert=analysis.service order=1 type=application

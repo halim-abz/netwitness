@@ -6,13 +6,6 @@
 	<type>ootb</type>
 	<severity>5</severity>
 	<enabled>false</enabled>
-	<last_modified>1727358727</last_modified>
-	<revision>1</revision>
-	<variables>
-		<variable id="ext_list" is_array="true">
-			<name ref="$ext_list_name"/>
-			<desc ref="$ext_list_desc"/>
-			<value type="string">one</value>
-		</variable>
-	</variables>
+	<last_modified>1731576135</last_modified>
+	<revision>2</revision>
 </module>

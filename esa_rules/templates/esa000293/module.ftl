@@ -21,7 +21,7 @@ SELECT * FROM
 		AND (
 			filetype IN ( 'windows executable','windows_executable','windows installer','windows installer msi','windows_dll','windows dll','cab','x86 pe','x86_pe','x64 pe' )
 			<#if ext_list[0].value != "">
-			OR asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
+			OR (<@buildExtList inputlist=ext_list/>)
 			</#if>
 		)
 		<#if ipdst_list[0].value != "">
@@ -48,4 +48,13 @@ SELECT * FROM
 		|| value.type?starts_with("long") || value.type?starts_with("float") || value.type?starts_with("int")>
 		${value.value?c}	
 	</#if>
+</#macro>
+
+<#macro buildExtList inputlist>
+	<@compress single_line=true>
+	<#list inputlist as v>
+		asStringArray(filename).anyOf(v => v.toLowerCase() LIKE ('%${v.value}'))
+		<#if v_has_next> OR </#if>
+	</#list>
+	</@compress>
 </#macro>

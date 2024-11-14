@@ -6,8 +6,8 @@
 	<type>ootb</type>
 	<severity>1</severity>
 	<enabled>false</enabled>
-	<last_modified>1727358727</last_modified>
-	<revision>1</revision>
+	<last_modified>1731576135</last_modified>
+	<revision>2</revision>
 	<variables>
 		<variable id="ipsrc_list" is_array="true">
 			<name ref="$ipsrc_list_name"/>
@@ -22,21 +22,16 @@
 		<variable id="filecontains_list" is_array="true">
 			<name ref="$filecontains_list_name"/>
 			<desc ref="$filecontains_list_desc"/>
-			<value type="string">passw</value>
+			<value type="string">%passw%txt</value>
+			<value type="string">%passw%xls</value>
+			<value type="string">%passw%xlsx</value>
+			<value type="string">%passw%doc</value>
+			<value type="string">%passw%docx</value>
 		</variable>
 		<variable id="filewhite_list" is_array="true">
 			<name ref="$filewhite_list_name"/>
 			<desc ref="$filewhite_list_desc"/>
 			<value type="string"> </value>
-		</variable>
-		<variable id="ext_list" is_array="true">
-			<name ref="$ext_list_name"/>
-			<desc ref="$ext_list_desc"/>
-			<value type="string">txt</value>
-			<value type="string">xls</value>
-			<value type="string">xlsx</value>
-			<value type="string">doc</value>
-			<value type="string">docs</value>
 		</variable>
 	</variables>
 </module>

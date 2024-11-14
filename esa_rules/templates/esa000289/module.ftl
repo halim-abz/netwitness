@@ -12,7 +12,7 @@ SELECT * FROM
 	    medium = 1
 		AND direction = 'outbound'
 		<#if ext_list[0].value != "">
-		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
+		AND (<@buildExtList inputlist=ext_list/>)
 		</#if>
 		<#if agent_list[0].value != "">
 		AND (<@buildAgentList inputlist=agent_list/>)
@@ -50,6 +50,15 @@ SELECT * FROM
 	<@compress single_line=true>
 	<#list inputlist as v>
 		client NOT LIKE '%${v.value}%'
+		<#if v_has_next> OR </#if>
+	</#list>
+	</@compress>
+</#macro>
+
+<#macro buildExtList inputlist>
+	<@compress single_line=true>
+	<#list inputlist as v>
+		asStringArray(filename).anyOf(v => v.toLowerCase() LIKE ('%${v.value}'))
 		<#if v_has_next> OR </#if>
 	</#list>
 	</@compress>

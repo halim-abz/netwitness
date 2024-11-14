@@ -1,9 +1,9 @@
 ResourceType=esaRule
 FileName=esa000243
-Title=NTDS Accessible Over SMB
+Title=NTDS Seen Over SMB
 Medium=packet
 Tags=
-Description=Detects when the "NTDS.dit" file is accessible over SMB.
+Description=Detects when the "NTDS.dit" file is seen over SMB.
 Dependencies=
 Discontinued=false
 Risk=high

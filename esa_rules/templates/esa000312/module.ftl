@@ -1,5 +1,5 @@
 /*
-Version: 1
+Version: 2
 */
 module ${module_id};
 
@@ -15,7 +15,6 @@ SELECT * FROM
 		AND (
 			<@buildFileContainsList inputlist=filecontains_list/>
 		)
-		AND asStringArray(extension).anyOf(v => v.toLowerCase() IN (<@buildList inputlist=ext_list/>))
 		<#if filewhite_list[0].value != "">
 		AND (
 			<@buildFileWhiteContainsList inputlist=filewhite_list/>
@@ -32,7 +31,7 @@ SELECT * FROM
 <#macro buildFileContainsList inputlist>
 	<@compress single_line=true>
 	<#list inputlist as v>
-		(asStringArray(filename)).anyOf(v => v.toLowerCase() LIKE '%${v.value}%')
+		(asStringArray(filename)).anyOf(v => v.toLowerCase() LIKE '${v.value}')
 		<#if v_has_next> OR </#if>
 	</#list>
 	</@compress>
@@ -41,7 +40,7 @@ SELECT * FROM
 <#macro buildFileWhiteContainsList inputlist>
 	<@compress single_line=true>
 	<#list inputlist as v>
-		(asStringArray(filename)).allOf(v => v.toLowerCase() NOT LIKE '%${v.value}%')
+		(asStringArray(filename)).allOf(v => v.toLowerCase() NOT LIKE '${v.value}')
 		<#if v_has_next> OR </#if>
 	</#list>
 	</@compress>
