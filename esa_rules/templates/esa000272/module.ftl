@@ -13,12 +13,12 @@ SELECT * FROM
 	    AND service = 139 
 	    AND 'smb v1 request' = ANY(eoc)
 	    AND 'smb v1 response' = ANY(eoc)
-	    AND 'create' = ANY(action)
-	    AND 'read' = ANY(action)
-	    AND 'write' = ANY(action)
-	    AND 'delete' = ANY(action)
-	    AND '\\\\c$\\\\' = ANY(directory)
-	    AND '\\\\admin$\\\\' = ANY(directory)
+	    AND isOneOfIgnoreCase(action,{'create'})
+	    AND isOneOfIgnoreCase(action,{'read'})
+	    AND isOneOfIgnoreCase(action,{'write'})
+	    AND isOneOfIgnoreCase(action,{'delete'})
+	    AND isOneOfIgnoreCase(directory,{'\\c$\\'})
+	    AND isOneOfIgnoreCase(directory,{'\\admin$\\'})
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
