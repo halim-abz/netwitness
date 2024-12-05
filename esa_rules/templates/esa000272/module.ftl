@@ -11,14 +11,16 @@ SELECT * FROM
 	Event(
     	medium = 1
 	    AND service = 139 
-	    AND 'smb v1 request' = ANY(eoc)
-	    AND 'smb v1 response' = ANY(eoc)
+	    AND isOneOfIgnoreCase(eoc,{'smb v1 request'})
 	    AND isOneOfIgnoreCase(action,{'create'})
-	    AND isOneOfIgnoreCase(action,{'read'})
-	    AND isOneOfIgnoreCase(action,{'write'})
-	    AND isOneOfIgnoreCase(action,{'delete'})
-	    AND isOneOfIgnoreCase(directory,{'\\c$\\'})
-	    AND isOneOfIgnoreCase(directory,{'\\admin$\\'})
+	    AND isOneOfIgnoreCase(action,{'login'})
+	    AND isOneOfIgnoreCase(action,{'get'})
+	    AND isOneOfIgnoreCase(action,{'session setup'})
+	    AND isOneOfIgnoreCase(action,{'tree connect'})
+	    AND (
+			isOneOfIgnoreCase(directory,{'\\c$\\'})
+			OR isOneOfIgnoreCase(directory,{'\\admin$\\'})
+		)
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
