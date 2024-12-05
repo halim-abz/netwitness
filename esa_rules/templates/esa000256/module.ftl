@@ -11,6 +11,7 @@ module ${module_id};
 SELECT window(*) FROM 
 	Event(
 		medium = 1
+		AND direction NOT IN ('inbound')
 		AND client IS NOT NULL
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)

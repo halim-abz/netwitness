@@ -9,9 +9,9 @@ module ${module_id};
 
 SELECT * FROM PATTERN [ 
 	every-distinct(ip_src, ${time_window?c} minutes)
-	 e1=Event(client.toLowerCase() LIKE '%linux%'<#if ip_list[0].value != ""> AND ip_src NOT IN (<@buildList inputlist=ip_list/>)</#if><#if useragent_list[0].value != ""> AND client.toLowerCase() NOT IN (<@buildList inputlist=useragent_list/>)</#if>)
+	 e1=Event(direction NOT IN ('inbound') AND client.toLowerCase() LIKE '%linux%'<#if ip_list[0].value != ""> AND ip_src NOT IN (<@buildList inputlist=ip_list/>)</#if><#if useragent_list[0].value != ""> AND client.toLowerCase() NOT IN (<@buildList inputlist=useragent_list/>)</#if>)
 	->
-	 e2=Event(client.toLowerCase() LIKE '%windows%'<#if useragent_list[0].value != ""> AND client.toLowerCase() NOT IN (<@buildList inputlist=useragent_list/>)</#if> AND ip_src=e1.ip_src)
+	 e2=Event(direction NOT IN ('inbound') AND client.toLowerCase() LIKE '%windows%'<#if useragent_list[0].value != ""> AND client.toLowerCase() NOT IN (<@buildList inputlist=useragent_list/>)</#if> AND ip_src=e1.ip_src)
 
 	where timer:within(${time_window?c} minutes)
 ];
