@@ -18,6 +18,9 @@ SELECT window(*) FROM
 		<#if tld_list[0].value != "">
 		AND	tld NOT IN (<@buildList inputlist=tld_list/>)
 		</#if>
+		<#if domain_list[0].value != "">
+		AND	domain NOT IN (<@buildList inputlist=domain_list/>)
+		</#if>
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>

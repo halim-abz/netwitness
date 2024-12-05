@@ -30,5 +30,10 @@
 			<value type="string">local</value>
 			<value type="string">lan</value>
 		</variable>
+		<variable id="domain_list" is_array="true">
+			<name ref="$domain_list_name"/>
+			<desc ref="$domain_list_desc"/>
+			<value type="string"> </value>
+		</variable>
 	</variables>
 </module>

@@ -9,7 +9,7 @@ esa000246,Password Guessing - Protocol with Error Message,T1110.001,Credential A
 esa000247,Password Guessing over RDP,T1110.001,Credential Access,Brute Force,Password Guessing
 esa000248,Multiple OS on the Same Host,T1564.006,Defense Evasion,Hide Artifacts,Run Virtual Instance
 esa000249,Kerberoasting Cipher Downgrade,T1558.003,Credential Access,Steal or Forge Kerberos Tickets,Kerberoasting
-esa000250,DGA Multiple Failed Unqiue Domain Resolutions,T1568.002,Command and Control,Dynamic Resolution,Domain Generation Algorythm
+esa000250,DGA Multiple Failed Unique Domain Resolutions,T1568.002,Command and Control,Dynamic Resolution,Domain Generation Algorythm
 esa000251,Multiple Different HTTP 4xx Errors,T1071.001,Command and Control,Application Layer Protocol,Web Protocols
 esa000252,Communication to Same Domain with Many Subdomains,T1071.004,Command and Control,Application Layer Protocol,DNS
 esa000253,Programatic Inbound HTTP POST Requests,T1505.003,Persistence,Server Software Component,Web Shell
