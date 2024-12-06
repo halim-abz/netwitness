@@ -38,6 +38,8 @@
 			<value type="string">xls</value>
 			<value type="string">xlsm</value>
 			<value type="string">pptm</value>
+			<value type="string">txt</value>
+			<value type="string">tmp</value>
 		</variable>
 		<variable id="domain_list" is_array="true">
 			<name ref="$domain_list_name"/>
