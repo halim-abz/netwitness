@@ -1,0 +1,81 @@
+Name,Tactic,Technique
+[NWC] Horizontal Network Service Discovery,Discovery,T1046
+[NWC] Network Password Spraying,Credential Access,T1110.003
+[NWC] Credential Stuffing,Credential Access,T1110.004
+[NWC] NTDS Seen over SMB,Credential Access,T1003.003
+[NWC] Kerberos Account Scanning,Discovery,T1087
+[NWC] Password Guessing - Protocols with Clear-Text Password,Credential Access,T1110.001
+[NWC] Password Guessing - Protocol with Error Message,Credential Access,T1110.001
+[NWC] Password Guessing over RDP,Credential Access,T1110.001
+[NWC] Multiple OS on the Same Host,Defense Evasion,T1564.006
+[NWC] Kerberoasting Cipher Downgrade,Credential Access,T1558.003
+[NWC] DGA Multiple Failed Unique Domain Resolutions,Command and Control,T1568.002
+[NWC] Multiple Different HTTP 4xx Errors,Command and Control,T1071.001
+[NWC] Communication to Same Domain with Many Subdomains,Command and Control,T1071.004
+[NWC] Programatic Inbound HTTP POST Requests,Persistence,T1505.003
+[NWC] Multiple Outbound 404 Error (Expired C2 Server),Command and Control,T1071.001
+[NWC] Multiple Internal HTTP 404 Errors,Reconnaissance,T1595.003
+[NWC] Multiple Unique User Agents,Reconnaissance,T1595.003
+[NWC] Upload of Archive File to FTP,Exfiltration,T1048.003
+[NWC] Upload of Archive Direct to IP over HTTP,Exfiltration,T1048.003
+[NWC] Upload of File Over the Telegram API,Exfiltration,T1567
+[NWC] Email with OneNote File Attachment,Initial Access,T1566.001
+[NWC] Attachment with Macro Enabled Office Document,Initial Access,T1566.001
+[NWC] Multiple Failed Access Attempts to Network Shares,Discovery,T1135
+[NWC] Large LDAP Session Possible Reconnaissance,Discovery,T1087.002
+[NWC] Suspicious PowerShell Script Download,Command and Control,T1105
+[NWC] Suspicious Executable Download,Command and Control,T1105
+[NWC] Remotely Add User to Domain Group,Privilege Escalation,T1098
+[NWC] Remote Execution Potential PsExec,Execution,T1569.002
+"[NWC] Remote Service Created, Deleted, or Modified",Execution,T1569.002
+[NWC] Scheduled Task,Execution,T1053.005
+[NWC] Remote Shutdown,Impact,T1529
+[NWC] Windows Event Logs Cleared,Defense Evasion,T1070.001
+[NWC] Possible Lateral Movement Over SMB,Lateral Movement,T1021.002
+[NWC] Download Suspicious File with wget-curl,Command and Control,T1105
+[NWC] BITS job Downloads Executable,Command and Control,T1105
+[NWC] FirstWatch Feed Match for Outbound Traffic,,
+[NWC] FirstWatch Feed Match for Inbound Traffic,,
+[NWC] VNC with no Authentication Required,Lateral Movement,T1021.005
+[NWC] Possible SQL Injection,Initial Access,T1190
+[NWC] Possible Zerologon Attempt,Lateral Movement,T1210
+[NWC] DNS Zone Transfer,Reconnaissance,T1590.002
+[NWC] Outbound Traffic to Tor Network,Command and Control,T1090.003
+[NWC] PowerShell Initiating Outbound Connection,Execution,T1059.001
+[NWC] Domain Replication,Credential Access,T1003.006
+[NWC] Lolbas Downloading Risky Filetype,Command and Control,T1105
+[NWC] Kerberos with Disabled Account,,
+[NWC] Mimikatz Strings Detected,Credential Access,T1003
+[NWC] Potential SSH Tunnel,Command and Control,T1572
+[NWC] Kali Detected,,
+[NWC] Download of Risky Filetype from Uncommon Domain,Command and Control,T1105
+[NWC] Outbound Connection to Self-Signed Certificate,Command and Control,T1071.001
+[NWC] Outbound Connection to Suspicious Certificate,Command and Control,T1071.001
+[NWC] Outbound SSH Connection,Exfiltration,T1041
+[NWC] Executable File Copied to Common Admin Shared Folder,Lateral Movement,T1080
+[NWC] New User Agents,,
+[NWC] New SSH Outbound Destination,,
+[NWC] New PowerShell IP Destination,,
+[NWC] New Lolbas IP Destination,,
+[NWC] New IP Downloading PS Script,,
+[NWC] New Destination for EXE Download,,
+[NWC] New Source Connecting Over RDP,,
+[NWC] New Source Connecting Over SSH,,
+[NWC] New Cert Authorities,,
+[NWC] New SSH Client,,
+[NWC] New Outbound IP with IOC,,
+[NWC] Hacktool User Agent,,
+[NWC] Suspicious User Agent,,
+[NWC] Dictionary-based Password,,
+[NWC] Email with Probable Malicious Attachment,Initial Access,T1566.001
+[NWC] Typical Lateral Service Seen in Outbound Direction,,
+[NWC] Sensitive Account with Plaintext Password,,
+[NWC] RDP with Sensitive Account,,
+[NWC] Potential File Containing Passwords,,
+[NWC] Large Number of File Writes over SMB,,
+[NWC] Executable Propagation to Multiple Destinations,,
+[NWC] Many Kerberos TGS Requests,Credential Access,T1558.003
+[NWC] New Source for TGS Requests,,
+[NWC] New Destination for TGS Requests,,
+[NWC] New Source Copying Executables Over SMB,,
+[NWC] New User Requesting TGS Ticket for krbtgt Service,,
