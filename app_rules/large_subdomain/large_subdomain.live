@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=large_subdomain
+Title=large subdomain
+Medium=packet,log
+Tags=
+Description=Identifies long subdomains that have more than 30 characters.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags=

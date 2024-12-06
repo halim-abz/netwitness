@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=filename_multiple_spaces
+Title=filename with multiple spaces
+Medium=packet,log
+Tags=
+Description=Identifies filenames that have multiple spaces.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags=

@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=rdp_with_sensitive_account
+Title=rdp with sensitive account
+Medium=packet
+Tags=
+Description=Identifies logins over RDP using sensitive a account
+Dependencies=
+Discontinued=false
+Risk=medium
+MitreTags=

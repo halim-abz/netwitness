@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=6_or_more_subdomains
+Title=6 or more subdomains
+Medium=packet,log
+Tags=
+Description=Identifies alias.host with 6 or more subdomains.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags=

@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=non_alphanumerical_domain
+Title=non-alphanumerical domain
+Medium=packet
+Tags=
+Description=Identifies domains with non-alphanumerical characters.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags=
