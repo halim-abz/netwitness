@@ -1,0 +1,1 @@
+name="mixed upper and lower case domain for outbound traffic" rule="alias.host regex '(?-i)[a-z][A-Z]' && direction='outbound'" alert=analysis.service order=1 type=application

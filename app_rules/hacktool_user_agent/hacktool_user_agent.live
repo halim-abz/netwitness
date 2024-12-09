@@ -1,6 +1,6 @@
 ResourceType=appRule
 FileName=hacktool_user_agent
-Title=Hacktool User-Agent
+Title=hacktool user agent
 Medium=packet,log
 Tags=
 Description=Identifies default user-agent strings used by common hacking tools.

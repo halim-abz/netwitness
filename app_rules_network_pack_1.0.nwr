@@ -7,3 +7,4 @@ name="non-alphanumerical domain" rule="service = 80,443,53 && alias.host regex '
 name="plaintext password for critical account" rule="password exists && username begins 'admin','root','svc','cn=admin','cn=svc','cn=root'" alert=eoc order=1 type=application
 name="potential password file" rule="filename contains 'password' && filename ends 'txt','xlsx','xls'" alert=eoc order=1 type=application
 name="rdp with sensitive account" rule="service = 3389 && (username begins 'admin','svc' || username contains 'adm' || username ends '$')" alert=boc order=1 type=application
+name="mixed upper and lower case domain for outbound traffic" rule="alias.host regex '(?-i)[a-z][A-Z]' && direction='outbound'" alert=analysis.service order=1 type=application
