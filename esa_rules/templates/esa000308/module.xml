@@ -8,4 +8,11 @@
 	<enabled>false</enabled>
 	<last_modified>1727358727</last_modified>
 	<revision>1</revision>
+	<variables>
+		<variable id="alert_suppression">
+			<name ref="$alert_suppression_name"/>
+			<desc ref="$alert_suppression_desc"/>
+			<value type="int">0</value>
+		</variable>
+	</variables>
 </module>

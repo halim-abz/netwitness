@@ -6,18 +6,28 @@
 	<type>ootb</type>
 	<severity>9</severity>
 	<enabled>false</enabled>
-	<last_modified>1727358727</last_modified>
+	<last_modified>1735891761</last_modified>
 	<revision>1</revision>
 	<variables>
-		<variable id="ip_list" is_array="true">
-			<name ref="$ip_list_name"/>
-			<desc ref="$ip_list_desc"/>
+		<variable id="ipsrc_list" is_array="true">
+			<name ref="$ipsrc_list_name"/>
+			<desc ref="$ipsrc_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="ipdst_list" is_array="true">
+			<name ref="$ipdst_list_name"/>
+			<desc ref="$ipdst_list_desc"/>
 			<value type="string"> </value>
 		</variable>
 		<variable id="useragent_list" is_array="true">
 			<name ref="$useragent_list_name"/>
 			<desc ref="$useragent_list_desc"/>
 			<value type="string"> </value>
+		</variable>
+		<variable id="alert_suppression">
+			<name ref="$alert_suppression_name"/>
+			<desc ref="$alert_suppression_desc"/>
+			<value type="int">0</value>
 		</variable>
 	</variables>
 </module>

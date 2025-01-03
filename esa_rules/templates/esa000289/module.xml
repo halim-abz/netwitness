@@ -48,5 +48,10 @@
 			<desc ref="$top10kfeed_desc"/>
 			<value type="string">yes</value>
 		</variable>
+		<variable id="alert_suppression">
+			<name ref="$alert_suppression_name"/>
+			<desc ref="$alert_suppression_desc"/>
+			<value type="int">0</value>
+		</variable>
 	</variables>
 </module>

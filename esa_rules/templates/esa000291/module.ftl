@@ -5,7 +5,7 @@ module ${module_id};
 
 <#if module_debug>@Audit('stream')</#if>
 @Name('${module_id}_Alert')
-@RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src","ip_dst","domain"})
+@RSAAlert(oneInSeconds=${alert_suppression?c}, identifiers={"ip_src","ip_dst","domain"})
 
 SELECT * FROM 
 	Event(

@@ -6,7 +6,7 @@
 	<type>ootb</type>
 	<severity>5</severity>
 	<enabled>false</enabled>
-	<last_modified>1727358727</last_modified>
+	<last_modified>1735891761</last_modified>
 	<revision>1</revision>
 	<variables>
 		<variable id="ip_list" is_array="true">
@@ -18,6 +18,16 @@
 			<name ref="$dc_list_name"/>
 			<desc ref="$dc_list_desc"/>
 			<value type="string"> </value>
+		</variable>
+		<variable id="ldap_size">
+			<name ref="$ldap_size_name"/>
+			<desc ref="$ldap_size_desc"/>
+			<value type="int">1048576</value>
+		</variable>
+		<variable id="alert_suppression">
+			<name ref="$alert_suppression_name"/>
+			<desc ref="$alert_suppression_desc"/>
+			<value type="int">0</value>
 		</variable>
 	</variables>
 </module>

@@ -5,13 +5,13 @@ module ${module_id};
 
 <#if module_debug>@Audit('stream')</#if>
 @Name('${module_id}_Alert')
-@RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src"})
+@RSAAlert(oneInSeconds=${alert_suppression?c}, identifiers={"ip_src"})
 
 SELECT * FROM 
 	Event(
 		medium = 1
 		AND service = 389
-		AND payload > 524288
+		AND payload > ${ldap_size?c}
 		<#if dc_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=dc_list/>)
 		</#if>

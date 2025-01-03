@@ -29,5 +29,10 @@
 			<desc ref="$service_list_desc"/>
 			<value type="int">999</value>
 		</variable>
+		<variable id="alert_suppression">
+			<name ref="$alert_suppression_name"/>
+			<desc ref="$alert_suppression_desc"/>
+			<value type="int">0</value>
+		</variable>
 	</variables>
 </module>

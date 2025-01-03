@@ -6,7 +6,7 @@ module ${module_id};
 <#if module_debug>@Audit('stream')</#if>
 @Hint('reclaim_group_aged=${time_window*2}')
 @Name('${module_id}_Alert')
-@RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src", "ip_dst", "service"})
+@RSAAlert(oneInSeconds=${alert_suppression?c}, identifiers={"ip_src", "ip_dst", "service"})
 
 SELECT window(*) FROM 
 	Event(
@@ -17,8 +17,11 @@ SELECT window(*) FROM
 			OR ad_username_src IS NOT NULL
 			OR service = 3389
 		)
-		<#if ip_list[0].value != "">
-		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
+		<#if ipsrc_list[0].value != "">
+		AND	ip_src NOT IN (<@buildList inputlist=ipsrc_list/>)
+		</#if>
+		<#if ipdst_list[0].value != "">
+		AND	ip_dst NOT IN (<@buildList inputlist=ipdst_list/>)
 		</#if>
 	).std:groupwin(ip_src,ip_dst,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(username,ad_username_src) group by ip_src, ip_dst, service having count(*) >= ${count?c} output first every 30 min;
 

@@ -5,7 +5,7 @@ module ${module_id};
 
 <#if module_debug>@Audit('stream')</#if>
 @Name('${module_id}_Alert')
-@RSAAlert(oneInSeconds=${module_suppress?c})
+@RSAAlert(oneInSeconds=${alert_suppression?c})
 
 SELECT * FROM 
 	Event(
@@ -14,8 +14,11 @@ SELECT * FROM
 		<#if useragent_list[0].value != "">
 		AND client NOT IN (<@buildList inputlist=useragent_list/>)
 		</#if>
-		<#if ip_list[0].value != "">
-		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
+		<#if ipsrc_list[0].value != "">
+		AND ip_src NOT IN (<@buildList inputlist=ipsrc_list/>)
+		</#if>
+		<#if ipdst_list[0].value != "">
+		AND ip_dst NOT IN (<@buildList inputlist=ipdst_list/>)
 		</#if>
 	).std:unique(ip_src) group by ip_src output first every 30 min;
 

@@ -6,7 +6,7 @@ module ${module_id};
 <#if module_debug>@Audit('stream')</#if>
 @Hint('reclaim_group_aged=${time_window*2}')
 @Name('${module_id}_Alert')
-@RSAAlert(oneInSeconds=${module_suppress?c}, identifiers={"ip_src", "tcp_dstport"})
+@RSAAlert(oneInSeconds=${alert_suppression?c}, identifiers={"ip_src", "tcp_dstport"})
 
 SELECT window(*) FROM 
 	Event(
