@@ -12,4 +12,4 @@ SELECT * FROM
 		medium = 1
 		AND service = 139
 		AND asStringArray(filename).anyOf(v => v.toLowerCase() IN ('ntds.dit'))
-	).std:unique(ip_src) group by ip_src output first every 30 min;
+	).std:unique(ip_src) group by ip_src<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;

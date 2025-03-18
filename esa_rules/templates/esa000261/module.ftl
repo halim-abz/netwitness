@@ -22,4 +22,4 @@ SELECT * FROM
 			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%ppsm'))
 			OR asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%sldm'))
 		)
-	).std:unique(ip_src) group by ip_src output first every 30 min;
+	).std:unique(ip_src) group by ip_src<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;

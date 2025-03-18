@@ -34,7 +34,7 @@
 		<variable id="alert_suppression">
 			<name ref="$alert_suppression_name"/>
 			<desc ref="$alert_suppression_desc"/>
-			<value type="int">0</value>
+			<value type="int">1800</value>
 		</variable>
 	</variables>
 </module>

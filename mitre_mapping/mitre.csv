@@ -34,8 +34,6 @@ Name,Tactic,Technique
 [NWC] Possible Lateral Movement Over SMB,Lateral Movement,T1021.002
 [NWC] Download Suspicious File with wget-curl,Command and Control,T1105
 [NWC] BITS Job Downloads Executable,Command and Control,T1105
-[NWC] FirstWatch Feed Match for Outbound Traffic,,
-[NWC] FirstWatch Feed Match for Inbound Traffic,,
 [NWC] VNC with no Authentication Required,Lateral Movement,T1021.005
 [NWC] Possible SQL Injection,Initial Access,T1190
 [NWC] Possible ZeroLogon Attempt,Lateral Movement,T1210
@@ -44,38 +42,12 @@ Name,Tactic,Technique
 [NWC] PowerShell Initiating Outbound Connection,Execution,T1059.001
 [NWC] Domain Replication,Credential Access,T1003.006
 [NWC] Lolbas Downloading Risky File,Command and Control,T1105
-[NWC] Kerberos with Disabled Account,,
 [NWC] Mimikatz Strings Detected,Credential Access,T1003
 [NWC] Potential SSH Tunnel,Command and Control,T1572
-[NWC] Kali Detected,,
 [NWC] Download Risky Filetype from Uncommon Domain,Command and Control,T1105
 [NWC] Outbound Connection to Self-Signed Certificate,Command and Control,T1071.001
 [NWC] Outbound Connection to Suspicious Certificate,Command and Control,T1071.001
 [NWC] Outbound SSH Connection,Exfiltration,T1041
 [NWC] Executable File Copied to Common Admin Shared Folder,Lateral Movement,T1080
-[NWC] New User Agents,,
-[NWC] New SSH Outbound Destination,,
-[NWC] New PowerShell IP Destination,,
-[NWC] New Lolbas IP Destination,,
-[NWC] New IP Downloading PS Script,,
-[NWC] New Destination for EXE Download,,
-[NWC] New Source Connecting Over RDP,,
-[NWC] New Source Connecting Over SSH,,
-[NWC] New Cert Authorities,,
-[NWC] New SSH Client,,
-[NWC] New Outbound IP with IOC,,
-[NWC] Hacktool User Agent,,
-[NWC] Suspicious User Agent,,
-[NWC] Dictionary-based Password,,
 [NWC] Email with Probable Malicious Attachment,Initial Access,T1566.001
-[NWC] Typical Lateral Service Seen in Outbound Direction,,
-[NWC] Sensitive Account with Plaintext Password,,
-[NWC] RDP with Sensitive Account,,
-[NWC] Potential File Containing Passwords,,
-[NWC] Large Number of File Writes over SMB,,
-[NWC] Executable Propagation to Multiple Destinations,,
 [NWC] Many Kerberos TGS Requests,Credential Access,T1558.003
-[NWC] New Source for TGS Requests,,
-[NWC] New Destination for TGS Requests,,
-[NWC] New Source Copying Executables Over SMB,,
-[NWC] New User Requesting TGS Ticket for krbtgt Service,,

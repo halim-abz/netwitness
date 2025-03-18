@@ -21,7 +21,7 @@ SELECT * FROM
 		<#if top10kfeed_enabled == "yes">
 		AND 'top 10k domain' != ALL( analysis_session )
 		</#if>
-	).std:unique(ip_src) group by ip_src output first every 30 min;
+	).std:unique(ip_src) group by ip_src<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

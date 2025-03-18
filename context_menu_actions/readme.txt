@@ -1,0 +1,1 @@
+Paste to: Admin > System > Context Menu Actions > + > Switch to Advanced View

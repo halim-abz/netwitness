@@ -12,4 +12,4 @@ SELECT * FROM
 		medium = 1
 		AND service IN (25,110,143,209,220,465,587,993,995)
 		AND asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%one'))
-	).std:unique(ip_src) group by ip_src output first every 30 min;
+	).std:unique(ip_src) group by ip_src<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;

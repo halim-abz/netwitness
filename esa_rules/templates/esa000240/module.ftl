@@ -15,7 +15,7 @@ SELECT window(*) FROM
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
-	).std:groupwin(ip_src, tcp_dstport).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(ip_dst) group by ip_src, tcp_dstport having count(*) >= ${count?c} output first every 30 min;
+	).std:groupwin(ip_src, tcp_dstport).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(ip_dst) group by ip_src, tcp_dstport having count(*) >= ${count?c}<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

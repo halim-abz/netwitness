@@ -1,0 +1,35 @@
+{
+    "displayName": "VirusTotal Host",
+    "cssClasses": [
+        "alias-host",
+        "alias.host",
+        "alias_host",
+        "host-all",
+        "host.all",
+        "host_all"
+    ],
+    "description": "",
+    "type": "UAP.common.contextmenu.actions.URLContextAction",
+    "version": "CUSTOM",
+    "modules": [
+        "investigation"
+    ],
+    "local": "false",
+    "path": "context-actions",
+    "groupName": "External Lookup",
+    "urlFormat": " https://www.virustotal.com/gui/domain/{0}",
+    "provider": "User",
+    "scope": [
+        "alias.host",
+        "host.all"
+    ],
+    "disabled": false,
+    "id": "Id-1740425373559",
+    "moduleClasses": [
+        "UAP.investigation.navigate.view.NavigationPanel",
+        "UAP.investigation.reconstruction.view.content.ReconstructedEventDataGrid",
+        "UAP.investigation.analysis.view.EventAnalysisPanel"
+    ],
+    "openInNewTab": true,
+    "order": ""
+}

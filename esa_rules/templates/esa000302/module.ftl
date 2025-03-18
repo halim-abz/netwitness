@@ -7,7 +7,7 @@ module ${module_id};
 //Window to store timestamp for learning phase
 CREATE WINDOW NewCA_learning.win:length(1) (learningPhase long);
 INSERT INTO NewCA_learning
-SELECT current_timestamp.plus(${learning_days?c} days) as learningPhase FROM PATTERN[Event];
+SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</#if> as learningPhase FROM PATTERN[Event];
 
 //Window to store new data
 @RSAPersist	
@@ -27,7 +27,7 @@ WHEN NOT MATCHED
 SELECT *
 FROM Event(ssl_ca NOT IN (SELECT ssl_ca FROM NewCA) AND ssl_ca IS NOT NULL
 AND current_timestamp > (SELECT learningPhase FROM NewCA_learning))
-OUTPUT ALL EVERY ${group_hours?c} hours;
+OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
 
 //Every day, clear values older than x days
 ON PATTERN [every timer:interval(1 day)]

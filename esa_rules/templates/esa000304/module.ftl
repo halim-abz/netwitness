@@ -7,7 +7,7 @@ module ${module_id};
 //Window to store timestamp for learning phase
 CREATE WINDOW NewDestIPWithIOC_learning.win:length(1) (learningPhase long);
 INSERT INTO NewDestIPWithIOC_learning
-SELECT current_timestamp.plus(${learning_days?c} days) as learningPhase FROM PATTERN[Event];
+SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</#if> as learningPhase FROM PATTERN[Event];
 
 //Window to store new data
 @RSAPersist	
@@ -28,7 +28,7 @@ WHEN NOT MATCHED
 SELECT *
 FROM Event(ioc IS NOT NULL AND direction IN ('outbound') AND ip_dst NOT IN (SELECT ip_dst FROM NewDestIPWithIOC)
 AND current_timestamp > (SELECT learningPhase FROM NewDestIPWithIOC_learning))
-OUTPUT ALL EVERY ${group_hours?c} hours;
+OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
 
 //Every day, clear values older than x days
 ON PATTERN [every timer:interval(1 day)]

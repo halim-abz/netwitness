@@ -28,7 +28,7 @@ SELECT window(*) FROM
 		<#if top10kfeed_enabled == "yes">
 		AND 'top 10k domain' != ALL( analysis_session )
 		</#if>
-	).std:groupwin(ip_src,domain,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(alias_host) group by ip_src,domain,service having count(*) >= ${count?c} output first every 30 min;
+	).std:groupwin(ip_src,domain,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(alias_host) group by ip_src,domain,service having count(*) >= ${count?c}<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

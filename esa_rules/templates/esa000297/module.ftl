@@ -7,7 +7,7 @@ module ${module_id};
 //Window to store timestamp for learning phase
 CREATE WINDOW NewLolbasDownload_learning.win:length(1) (learningPhase long);
 INSERT INTO NewLolbasDownload_learning
-SELECT current_timestamp.plus(${learning_days?c} days) as learningPhase FROM PATTERN[Event];
+SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</#if> as learningPhase FROM PATTERN[Event];
 
 //Window to store new data
 @RSAPersist	
@@ -27,7 +27,7 @@ WHEN NOT MATCHED
 SELECT *
 FROM Event(ip_dst NOT IN (SELECT ip_dst FROM NewLolbasDownload) AND filename IS NOT NULL AND direction = 'outbound' AND (client.toLowerCase() LIKE 'microsoft bits%' OR client.toLowerCase() LIKE 'certutil%' OR client.toLowerCase() LIKE 'microsoft office%') AND 'top 10k domain' != ALL( analysis_session )
 AND current_timestamp > (SELECT learningPhase FROM NewLolbasDownload_learning))
-OUTPUT ALL EVERY ${group_hours?c} hours;
+OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
 
 //Every day, clear values older than x days
 ON PATTERN [every timer:interval(1 day)]

@@ -15,7 +15,7 @@ SELECT * FROM
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
-	) group by ip_src output first every 30 min;
+	) group by ip_src<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

@@ -23,7 +23,7 @@ SELECT window(*) FROM
 		<#if ipdst_list[0].value != "">
 		AND	ip_dst NOT IN (<@buildList inputlist=ipdst_list/>)
 		</#if>
-	).std:groupwin(ip_src,ip_dst,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(username,ad_username_src) group by ip_src, ip_dst, service having count(*) >= ${count?c} output first every 30 min;
+	).std:groupwin(ip_src,ip_dst,service).win:time_length_batch(${time_window?c} seconds, ${count*2}).std:unique(username,ad_username_src) group by ip_src, ip_dst, service having count(*) >= ${count?c}<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

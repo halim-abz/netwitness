@@ -19,7 +19,7 @@ SELECT * FROM
 		<#if ipdst_list[0].value != "">
 		AND	ip_dst NOT IN (<@buildList inputlist=ipdst_list/>)
 		</#if>
-	).std:unique(ip_src,ip_dst) group by ip_src,ip_dst output first every 30 min;
+	).std:unique(ip_src,ip_dst) group by ip_src,ip_dst<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;
 
 <#macro buildList inputlist>
 	<@compress single_line=true>

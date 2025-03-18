@@ -1,0 +1,43 @@
+{
+    "displayName": "VirusTotal IP",
+    "cssClasses": [
+        "alias-ip",
+        "alias.ip",
+        "alias_ip",
+        "ip-all",
+        "ip-dst",
+        "ip-src",
+        "ip.all",
+        "ip.dst",
+        "ip.src",
+        "ip_all",
+        "ip_dst",
+        "ip_src"
+    ],
+    "description": "",
+    "type": "UAP.common.contextmenu.actions.URLContextAction",
+    "version": "CUSTOM",
+    "modules": [
+        "investigation"
+    ],
+    "local": "false",
+    "path": "context-actions",
+    "groupName": "External Lookup",
+    "urlFormat": " https://www.virustotal.com/gui/ip-address/{0}",
+    "provider": "User",
+    "scope": [
+        "ip.src",
+        "ip.dst",
+        "alias.ip",
+        "ip.all"
+    ],
+    "disabled": false,
+    "id": "Id-1715926645277",
+    "moduleClasses": [
+        "UAP.investigation.navigate.view.NavigationPanel",
+        "UAP.investigation.reconstruction.view.content.ReconstructedEventDataGrid",
+        "UAP.investigation.analysis.view.EventAnalysisPanel"
+    ],
+    "openInNewTab": true,
+    "order": "1"
+}
