@@ -51,3 +51,6 @@ Name,Tactic,Technique
 [NWC] Executable File Copied to Common Admin Shared Folder,Lateral Movement,T1080
 [NWC] Email with Probable Malicious Attachment,Initial Access,T1566.001
 [NWC] Many Kerberos TGS Requests,Credential Access,T1558.003
+[NWC] Port Knocking,Defense Evasion,T1205.001
+[NWC] Suspicious ICMP Echo Request,Command and Control,T1095
+[NWC] Potential Beaconing Same Size,Command and Control,T1071

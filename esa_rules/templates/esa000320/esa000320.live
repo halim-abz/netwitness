@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000320
+Title=Port Knocking
+Medium=packet
+Tags=
+Description=Detects when X TCP connections to multiple unique closed ports are detected from the same source to the same destination within Y seconds. X and Y are configurable.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags="defense evasion":"traffic signaling"
+MitreIDs=T1205.001
+Testdata=

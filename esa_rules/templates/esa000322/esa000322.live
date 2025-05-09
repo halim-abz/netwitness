@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000322
+Title=Potential Beaconing Same Size
+Medium=packet
+Tags=
+Description=Detects when X sessions with the same payload size occur within Y minutes between the same source and the same destination in an outbound direction. X and Y are configurable.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags="command and control":"application layer protocol"
+MitreIDs=T1071
+Testdata=

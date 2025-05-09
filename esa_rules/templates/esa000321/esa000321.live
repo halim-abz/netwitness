@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000321
+Title=Suspicious ICMP Echo Request
+Medium=packet
+Tags=
+Description=Detects when a system is remotely shut down.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags="command and control":"non-application layer protocol"
+MitreIDs=T1095
+Testdata=

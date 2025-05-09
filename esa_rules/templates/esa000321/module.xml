@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module xmlns="http://www.netwitness.com/rta/1.0">
+	<id>esa000321</id>
+	<name ref="$module_name"/>
+	<desc ref="$module_desc"/>
+	<type>ootb</type>
+	<severity>1</severity>
+	<enabled>false</enabled>
+	<last_modified>1746780435</last_modified>
+	<revision>1</revision>
+	<variables>
+		<variable id="entropy_size">
+			<name ref="$entropy_size_name"/>
+			<desc ref="$entropy_size_desc"/>
+			<value type="int">6000</value>
+		</variable>
+		<variable id="ipsrc_list" is_array="true">
+			<name ref="$ipsrc_list_name"/>
+			<desc ref="$ipsrc_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="ipdst_list" is_array="true">
+			<name ref="$ipdst_list_name"/>
+			<desc ref="$ipdst_list_desc"/>
+			<value type="string"> </value>
+		</variable>
+		<variable id="org_list" is_array="true">
+			<name ref="$org_list_name"/>
+			<desc ref="$org_list_desc"/>
+			<value type="string">apple</value>
+			<value type="string">google</value>
+		</variable>
+		<variable id="alert_suppression">
+			<name ref="$alert_suppression_name"/>
+			<desc ref="$alert_suppression_desc"/>
+			<value type="int">1800</value>
+		</variable>
+	</variables>
+</module>
