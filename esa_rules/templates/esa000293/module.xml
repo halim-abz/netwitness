@@ -7,7 +7,7 @@
 	<severity>5</severity>
 	<enabled>false</enabled>
 	<last_modified>1727358727</last_modified>
-	<revision>1</revision>
+	<revision>2</revision>
 	<variables>
 		<variable id="ext_list" is_array="true">
 			<name ref="$ext_list_name"/>

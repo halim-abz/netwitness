@@ -1,5 +1,5 @@
 /*
-Version: 1
+Version: 2
 */
 module ${module_id};
 
@@ -11,12 +11,13 @@ SELECT * FROM
 	Event(
 		medium = 1
 		AND service = 139
-		AND matchLike(analysis_service, 'smb create%')
+		AND (asStringArray(action)).anyOf(v => v.toLowerCase().contains('create'))
+		AND (asStringArray(action)).anyOf(v => v.toLowerCase().contains('write'))
 		AND (asStringArray(directory)).anyOf(v => v.toLowerCase().contains('c$'))
 		AND (
-			(asStringArray(directory)).anyOf(v => v.toLowerCase().contains('windows\\\\temp'))
+			(asStringArray(directory)).anyOf(v => v.toLowerCase().contains('windows\\temp'))
 			OR (asStringArray(directory)).anyOf(v => v.toLowerCase().contains('programdata'))
-			OR (asStringArray(directory)).anyOf(v => v.toLowerCase().contains('users\\\\public'))
+			OR (asStringArray(directory)).anyOf(v => v.toLowerCase().contains('users\\public'))
 		)
 		AND (
 			filetype IN ( 'windows executable','windows_executable','windows installer','windows installer msi','windows_dll','windows dll','cab','x86 pe','x86_pe','x64 pe' )
