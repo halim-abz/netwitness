@@ -81,4 +81,4 @@ esa000318,New Source Copying Executables Over SMB,,,,
 esa000319,New User Requesting TGS Ticket for krbtgt Service,,,,
 esa000320,Port Knocking,T1205.001,Defense Evasion,Traffic Signaling,Port Knocking
 esa000321,Suspicious ICMP Echo Request,T1095,Command and Control,Non-Application Layer Protocol,
-esa000322,Potential Beaconing Same Size,T1071,Command and Control,Application Layer Protocol
+esa000322,Potential Beaconing Same Size,T1071,Command and Control,Application Layer Protocol,
