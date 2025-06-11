@@ -15,7 +15,7 @@ SELECT window(*) FROM
         (
           ( service IN (80,443) AND direction = 'outbound' )
           OR
-          ( service = 53 AND dns_querytype IN ('a record') AND alias_host.size() = 1 )
+          ( service = 53 AND dns_querytype IN ('a record') AND alias_host.size() < 3 )
         ) 
 		AND	domain IS NOT NULL
 		AND	alias_host IS NOT NULL
