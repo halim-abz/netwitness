@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000323
+Title=Remotely Create Domain User
+Medium=packet
+Tags=
+Description=Detects when a user is remotely created on the domain.
+Dependencies=
+Discontinued=false
+Risk=medium
+MitreTags="persistence":"create account"
+MitreIDs=T1136.002
+Testdata=
