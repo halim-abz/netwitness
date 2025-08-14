@@ -1,0 +1,1 @@
+name="android" rule="user.agent contains 'android'" alert=device.type order=1 type=application

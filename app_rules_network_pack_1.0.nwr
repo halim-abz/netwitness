@@ -8,3 +8,10 @@ name="plaintext password for critical account" rule="password exists && username
 name="potential password file" rule="filename contains 'password' && filename ends 'txt','xlsx','xls'" alert=eoc order=1 type=application
 name="rdp with sensitive account" rule="service = 3389 && (username begins 'admin','svc' || username contains 'adm' || username ends '$')" alert=boc order=1 type=application
 name="mixed upper and lower case domain for outbound traffic" rule="alias.host regex '(?-i)[a-z][A-Z]' && direction='outbound'" alert=analysis.service order=1 type=application
+name="android" rule="user.agent contains 'android'" alert=device.type order=1 type=application
+name="iphone" rule="user.agent contains 'iphone'" alert=device.type order=1 type=application
+name="ipad" rule="user.agent contains 'ipad'" alert=device.type order=1 type=application
+name="linux" rule="user.agent contains 'linux' && not(user.agent contains 'android','cros')" alert=device.type order=1 type=application
+name="mac" rule="user.agent contains 'macintosh')" alert=device.type order=1 type=application
+name="windows" rule="user.agent contains 'windows'" alert=device.type order=1 type=application
+name="chromeos" rule="user.agent contains 'cros','chromebook'" alert=device.type order=1 type=application

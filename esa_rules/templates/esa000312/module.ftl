@@ -12,6 +12,7 @@ SELECT * FROM
 		medium = 1
 		AND service = 139
 		AND filename IS NOT NULL
+		AND domain NOT IN ('microsoft.com')
 		AND (
 			<@buildFileContainsList inputlist=filecontains_list/>
 		)

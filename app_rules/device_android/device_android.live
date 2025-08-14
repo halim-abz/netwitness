@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=android
+Title=android
+Medium=packet,log
+Tags=
+Description=Tags Android devices based on user-agent value
+Dependencies=
+Discontinued=false
+Risk=
+MitreTags=

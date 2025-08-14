@@ -54,3 +54,5 @@ Name,Tactic,Technique
 [NWC] Port Knocking,Defense Evasion,T1205.001
 [NWC] Suspicious ICMP Echo Request,Command and Control,T1095
 [NWC] Potential Beaconing Same Size,Command and Control,T1071
+[NWC] Remotely Create Domain User,Persistence.T1136.002
+[NWC] WMI Remote Execution,Execution,T1047

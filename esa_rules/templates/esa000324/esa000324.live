@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000324
+Title=WMI Remote Execution
+Medium=packet
+Tags=
+Description=Detects when WMI is used to remote execute a command on a remote machine.
+Dependencies=
+Discontinued=false
+Risk=high
+MitreTags="execution":"windows management instrumentation"
+MitreIDs=T1047
+Testdata=

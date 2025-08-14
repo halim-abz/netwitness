@@ -83,3 +83,4 @@ esa000320,Port Knocking,T1205.001,Defense Evasion,Traffic Signaling,Port Knockin
 esa000321,Suspicious ICMP Echo Request,T1095,Command and Control,Non-Application Layer Protocol,
 esa000322,Potential Beaconing Same Size,T1071,Command and Control,Application Layer Protocol,
 esa000323,Remotely Create Domain User,T1136.002,Persistence,Create Account,Domain Account
+esa000324,WMI Remote Execution,T1047,Execution,Windows Management Instrumentation,

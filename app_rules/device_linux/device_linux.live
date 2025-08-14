@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=linux
+Title=linux
+Medium=packet,log
+Tags=
+Description=Tags Linux devices based on user-agent value
+Dependencies=
+Discontinued=false
+Risk=
+MitreTags=

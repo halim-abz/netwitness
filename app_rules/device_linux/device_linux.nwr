@@ -1,0 +1,1 @@
+name="linux" rule="user.agent contains 'linux' && not(user.agent contains 'android','cros')" alert=device.type order=1 type=application

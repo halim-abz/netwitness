@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=chromeos
+Title=chromeos
+Medium=packet,log
+Tags=
+Description=Tags ChromeOS devices based on user-agent value
+Dependencies=
+Discontinued=false
+Risk=
+MitreTags=

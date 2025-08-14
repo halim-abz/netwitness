@@ -10,5 +10,8 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 		medium = 1
-		AND 'Highly Probable Malicious Attachment' = ALL( boc )
+		AND (
+			'Highly Probable Malicious Attachment' = ALL( boc )
+			OR (service IN (25,110,143,209,220,465,587,993,995) AND asStringArray(attachment).anyOf(v => v.toLowerCase() LIKE ('%url')))
+		)
 	).std:unique(ip_src,attachment) group by ip_src,attachment<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;

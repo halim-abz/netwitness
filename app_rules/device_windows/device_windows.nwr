@@ -1,0 +1,1 @@
+name="windows" rule="user.agent contains 'windows'" alert=device.type order=1 type=application

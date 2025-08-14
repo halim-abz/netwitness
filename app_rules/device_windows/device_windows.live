@@ -1,0 +1,10 @@
+ResourceType=appRule
+FileName=windows
+Title=windows
+Medium=packet,log
+Tags=
+Description=Tags Windows devices based on user-agent value
+Dependencies=
+Discontinued=false
+Risk=
+MitreTags=
