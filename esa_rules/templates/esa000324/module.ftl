@@ -10,8 +10,9 @@ module ${module_id};
 SELECT * FROM 
 	Event(
 	    medium = 1
-	    AND service = 139 
+	    AND service IN (135, 139) 
 		AND 'remote wmi activity' = ANY(boc)
+		AND 'ExecMethod' = ANY(action)
 		<#if ip_list[0].value != "">
 		AND ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>
