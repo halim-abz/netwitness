@@ -34,13 +34,12 @@
 			<value type="int">110</value>
 			<value type="int">135</value>
 			<value type="int">139</value>
-			<value type="int">143</value>
+			<value type="int">389</value>
 			<value type="int">445</value>
 			<value type="int">1433</value>
 			<value type="int">1521</value>
 			<value type="int">3389</value>
 			<value type="int">5900</value>
-			<value type="int">7001</value>
 		</variable>
 		<variable id="alert_suppression">
 			<name ref="$alert_suppression_name"/>

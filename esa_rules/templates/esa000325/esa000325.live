@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000325
+Title=Common Ransomware File Extension
+Medium=packet
+Tags=
+Description=Detects when a filename is seen with an extension used by common ransomware families.
+Dependencies=
+Discontinued=false
+Risk=high
+MitreTags=
+MitreIDs=
+Testdata=

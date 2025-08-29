@@ -12,7 +12,7 @@ SELECT window(*) FROM
 	Event(
 		medium = 1
 		AND service = 139
-		AND 'put' = ANY(action)
+		AND 'Write' = ANY(action)
 		AND filetype IN ('windows executable')
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)

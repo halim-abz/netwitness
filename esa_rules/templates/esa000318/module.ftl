@@ -14,7 +14,7 @@ SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</
 CREATE WINDOW NewSrcCopyExe.win:keepall().std:unique(ip_src) (ip_src string, time long);
 
 //For incoming events, if value already exists, update timestamp, if not, create new entry
-ON Event(service = 139 AND 'put' = ANY(action) AND filetype IN ('windows executable')) as e
+ON Event(service = 139 AND 'Write' = ANY(action) AND filetype IN ('windows executable')) as e
 MERGE NewSrcCopyExe as w
 WHERE w.ip_src = e.ip_src
 WHEN MATCHED
@@ -25,7 +25,7 @@ WHEN NOT MATCHED
 //Compare to ip_src stored in the window
 @RSAAlert
 SELECT *
-FROM Event(ip_src NOT IN (SELECT ip_src FROM NewSrcCopyExe) AND service = 139 AND 'put' = ANY(action) AND filetype IN ('windows executable')
+FROM Event(ip_src NOT IN (SELECT ip_src FROM NewSrcCopyExe) AND service = 139 AND 'Write' = ANY(action) AND filetype IN ('windows executable')
 AND current_timestamp > (SELECT learningPhase FROM NewSrcCopyExe_learning))
 OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
 

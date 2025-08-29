@@ -1,1 +1,1 @@
-name="mac" rule="user.agent contains 'macintosh')" alert=device.type order=1 type=application
+name="mac" rule="user.agent contains 'macintosh'" alert=device.type order=1 type=application

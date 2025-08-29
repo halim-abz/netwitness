@@ -1,28 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <module xmlns="http://www.netwitness.com/rta/1.0">
-	<id>esa000248</id>
+	<id>esa000325</id>
 	<name ref="$module_name"/>
 	<desc ref="$module_desc"/>
 	<type>ootb</type>
-	<severity>1</severity>
+	<severity>8</severity>
 	<enabled>false</enabled>
-	<last_modified>1756116329</last_modified>
-	<revision>2</revision>
+	<last_modified>1755198623</last_modified>
+	<revision>1</revision>
 	<variables>
-		<variable id="time_window">
-			<name ref="$time_window_name"/>
-			<desc ref="$time_window_desc"/>
-			<value type="int">60</value>
-		</variable>
 		<variable id="ip_list" is_array="true">
 			<name ref="$ip_list_name"/>
 			<desc ref="$ip_list_desc"/>
 			<value type="string"> </value>
 		</variable>
-		<variable id="useragent_list" is_array="true">
-			<name ref="$useragent_list_name"/>
-			<desc ref="$useragent_list_desc"/>
-			<value type="string"> </value>
+		<variable id="extension_list" is_array="true">
+			<name ref="$extension_list_name"/>
+			<desc ref="$extension_list_desc"/>
+			<value type="string">wncry</value>
+			<value type="string">ryuk</value>
+			<value type="string">locky</value>
+			<value type="string">cerber</value>
+			<value type="string">crypto</value>
+			<value type="string">encrypted</value>
+			<value type="string">wannacry</value>
+			<value type="string">odin</value>
 		</variable>
 		<variable id="alert_suppression">
 			<name ref="$alert_suppression_name"/>

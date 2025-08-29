@@ -27,7 +27,7 @@
 		<variable id="service_list" is_array="true">
 			<name ref="$service_list_name"/>
 			<desc ref="$service_list_desc"/>
-			<value type="int">999</value>
+			<value type="int">0</value>
 		</variable>
 		<variable id="alert_suppression">
 			<name ref="$alert_suppression_name"/>

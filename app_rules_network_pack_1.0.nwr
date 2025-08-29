@@ -12,6 +12,6 @@ name="android" rule="user.agent contains 'android'" alert=device.type order=1 ty
 name="iphone" rule="user.agent contains 'iphone'" alert=device.type order=1 type=application
 name="ipad" rule="user.agent contains 'ipad'" alert=device.type order=1 type=application
 name="linux" rule="user.agent contains 'linux' && not(user.agent contains 'android','cros')" alert=device.type order=1 type=application
-name="mac" rule="user.agent contains 'macintosh')" alert=device.type order=1 type=application
+name="mac" rule="user.agent contains 'macintosh'" alert=device.type order=1 type=application
 name="windows" rule="user.agent contains 'windows'" alert=device.type order=1 type=application
 name="chromeos" rule="user.agent contains 'cros','chromebook'" alert=device.type order=1 type=application

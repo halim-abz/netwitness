@@ -17,8 +17,8 @@ SELECT window(*) FROM
 		</#if>
 		<#if user_list[0].value != "">
 		AND (
-				(username IS NOT NULL OR username NOT IN (<@buildList inputlist=user_list/>))
-				AND (ad_username_src IS NULL OR ad_username_src NOT IN (<@buildList inputlist=user_list/>))
+				(username IS NOT NULL AND username NOT IN (<@buildList inputlist=user_list/>))
+				OR (ad_username_src IS NOT NULL AND ad_username_src NOT IN (<@buildList inputlist=user_list/>))
 		)
 		</#if>
 	).std:groupwin(ip_src,ip_dst,service,ad_username_src,username).win:time_length_batch(${time_window?c} seconds, ${count*2}) group by ip_src,ip_dst,service,ad_username_src,username having count(*) >= ${count?c}<#if alert_suppression != 0> output first every ${alert_suppression/60} min</#if>;

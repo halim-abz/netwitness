@@ -11,9 +11,11 @@ module ${module_id};
 SELECT window(*) FROM 
 	Event(
 		medium = 1
-		AND	(username IS NOT NULL OR ad_username_src IS NOT NULL)
-		AND	password IS NOT NULL
+		<#if service_list[0].value != "">
 		AND	service NOT IN (<@buildList inputlist=service_list/>)
+		</#if>
+		AND password IS NOT NULL
+		AND (username IS NOT NULL OR (service = 139 AND ad_username_src IS NOT NULL))
 		<#if ip_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ip_list/>)
 		</#if>

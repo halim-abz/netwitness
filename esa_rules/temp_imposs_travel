@@ -1,0 +1,23 @@
+@RSAPersist
+create window MultiDistance.win:time(60 min).std:unique(ip_src,calc,latdec_dst,longdec_dst) (
+    ip_src string,
+    latdec_dst double,
+    longdec_dst double,
+    calc double
+);
+
+@Name('InsertDistance')
+INSERT INTO MultiDistance
+SELECT
+    ip_src,latdec_dst,longdec_dst,
+    (Math.acos(Math.sin(1.2868)*Math.sin(latdec_dst)+Math.cos(1.2868)*Math.cos(latdec_dst)*Math.cos(longdec_dst-103.8503))*7.9) as calc
+FROM Event(
+    direction = 'outbound' AND latdec_dst IS NOT NULL AND longdec_dst IS NOT NULL
+);
+
+@Name('DetectDistance')
+@RSAAlert(oneInSeconds=1800,identifiers={"ip_src","calc"})
+SELECT window(*)
+FROM MultiDistance
+GROUP BY ip_src
+HAVING count(distinct calc) > 1 output first every 60 min;

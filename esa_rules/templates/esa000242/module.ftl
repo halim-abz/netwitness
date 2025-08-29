@@ -15,7 +15,6 @@ SELECT window(*) FROM
 		AND (
 			username IS NOT NULL
 			OR ad_username_src IS NOT NULL
-			OR service = 3389
 		)
 		<#if ipsrc_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ipsrc_list/>)
