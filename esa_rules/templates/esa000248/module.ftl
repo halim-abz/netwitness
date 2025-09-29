@@ -5,13 +5,13 @@ module ${module_id};
 <#if module_debug>@Audit('stream')</#if>
 
 @RSAPersist
-create window MultiUserAgents.win:time(${time_window?c} min).std:unique(ip_src,os_type) (
+create window MultiOSUserAgents.win:time(${time_window?c} min).std:unique(ip_src,os_type) (
     ip_src string,
     os_type string
 );
 
 @Name('InsertUserAgentsIntoWindow')
-INSERT INTO MultiUserAgents
+INSERT INTO MultiOSUserAgents
 SELECT
     ip_src,
     CASE
@@ -43,7 +43,7 @@ FROM Event(
 @Name('${module_id}_Alert')
 @RSAAlert(oneInSeconds=${alert_suppression?c},identifiers={"ip_src"})
 SELECT window(*)
-FROM MultiUserAgents
+FROM MultiOSUserAgents
 GROUP BY ip_src
 HAVING count(distinct os_type) > 1 output first every ${time_window?c} min;
 

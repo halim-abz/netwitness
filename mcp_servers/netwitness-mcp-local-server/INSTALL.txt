@@ -1,0 +1,66 @@
+==============================================
+LOCAL NETWITNESS MCP SERVER GUIDE
+==============================================
+
+This guide outlines the steps required to build, configure, and run the NetWitness MCP Server Docker image, and how to configure a related application. In this configuration, both the MCP Server and the Application (such as Claude Desktop or Gemini CLI) must be running on the same local host.
+
+----------------------------------------------
+1. BUILD THE DOCKER IMAGE
+----------------------------------------------
+Navigate to the server directory and build the Docker image locally.
+
+  cd netwitness-mcp-local-server
+  docker build -t netwitness-mcp-local-server .
+
+----------------------------------------------
+2. CONFIGURE ENVIRONMENT VARIABLES
+----------------------------------------------
+Use the following commands to set the required credentials and API URL.
+Note: Change the IP and Port according to your NetWitness environment. Concentrator (50105), Broker (50104).
+
+  docker mcp secret set NETWITNESS_API_URL="https://192.168.1.200:50105"
+  docker mcp secret set NETWITNESS_USERNAME="admin"
+  docker mcp secret set NETWITNESS_PASSWORD="netwitness"
+
+----------------------------------------------
+3. CONFIGURE DOCKER REGISTRY
+----------------------------------------------
+You must copy or append the contents of the "registry.yaml" file to your user's Docker MCP configuration file.
+
+Destination path:
+  Windows: c:\Users\[user]\.docker\mcp\registry.yaml
+  Linux: ~/.docker/mcp/registry.yaml
+
+----------------------------------------------
+4. CONFIGURE DOCKER MCP CUSTOM CATALOG
+----------------------------------------------
+You must copy or append the contents of the "custom.yaml" file to your user's Docker MCP configuration file.
+
+Destination path:
+  Windows: c:\Users\[user]\.docker\mcp\catalogs\custom.yaml
+  Linux: ~/.docker/mcp/catalogs/custom.yaml
+
+----------------------------------------------
+5. CONFIGURE CLAUDE DESKTOP
+----------------------------------------------
+To connect the Claude application to your running MCP Server, copy the "claude_desktop_config.json" file to the specified application data directory and then update the configuration.
+
+1. Copy the file:
+   Copy "claude_desktop_config.json" to: %APPDATA%\Claude\claude_desktop_config.json
+
+2. Modify Home directory:
+   Edit the copied configuration file and replace the placeholder Home directory 
+   Windows: C:\\Users\\your_username/.docker/mcp:/mcp",
+   Linux: /home/your_username/.docker/mcp:/mcp",
+   Mac: /Users/your_username/.docker/mcp:/mcp",
+
+----------------------------------------------
+6. CONFIGURE GEMINI CLI
+----------------------------------------------
+To connect the Gemini CLI application to your running MCP Server, copy the content of the "claude_desktop_config.json" file to the Gemini CLI settings JSON file.
+1. Copy the content of the file to: [Home]\.gemini\settings.json
+
+----------------------------------------------
+7. RELOAD CONFIG
+----------------------------------------------
+For the changes to take effect, completely close the application (Claude Desktop or Gemini CLI) and re-open it.
