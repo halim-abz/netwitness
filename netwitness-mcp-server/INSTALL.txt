@@ -1,103 +1,138 @@
-==============================================
-NETWITNESS MCP SERVER GUIDE
-==============================================
+==================================================
+NETWITNESS MCP SERVER INSTALLATION AND CONFIGURATION
+==================================================
 
-This guide outlines the steps required to build, configure, and run the NetWitness MCP Server Docker image, and how to configure a related application.
+This guide provides the steps to build, configure, and run the NetWitness MCP Server Docker image, and outlines the required configuration for related applications like Claude Desktop and Gemini CLI.
+This guide assumes that Docker Desktop is already installed.
 
-----------------------------------------------
+--------------------------------------------------
+SECTION 1: NETWITNESS MCP SERVER DOCKER SETUP
+--------------------------------------------------
+
 1. BUILD THE DOCKER IMAGE
-----------------------------------------------
 Navigate to the server directory and build the Docker image locally.
 
   cd netwitness-mcp-server
   docker build -t netwitness-mcp-server .
 
-----------------------------------------------
-2. CONFIGURE ENVIRONMENT VARIABLES
-----------------------------------------------
-Use the following commands to set the required credentials and API URL.
-Note: Change the IP and Port according to your NetWitness environment. Concentrator (50105), Broker (50104).
+---
+
+2. CONFIGURE ENVIRONMENT VARIABLES (SECRETS)
+Set the required credentials and the NetWitness API URL using Docker MCP secrets.
+NOTE: Change the IP address and Port for your specific NetWitness environment. Common ports: Concentrator (50105), Broker (50104).
 
   docker mcp secret set NETWITNESS_API_URL="https://192.168.1.200:50105"
   docker mcp secret set NETWITNESS_USERNAME="admin"
   docker mcp secret set NETWITNESS_PASSWORD="netwitness"
 
-----------------------------------------------
-3. CONFIGURE DOCKER REGISTRY
-----------------------------------------------
-You must copy or append the contents of the "registry.yaml" file to your user's Docker MCP configuration file.
+---
 
-Destination path:
+3. CONFIGURE DOCKER REGISTRY
+Copy or append the contents of the "registry.yaml" file into your user's Docker MCP configuration file.
+
+DESTINATION PATH:
   Windows: c:\Users\[user]\.docker\mcp\registry.yaml
   Linux: ~/.docker/mcp/registry.yaml
 
-----------------------------------------------
-4. CONFIGURE DOCKER MCP CUSTOM CATALOG
-----------------------------------------------
-You must copy or append the contents of the "custom.yaml" file to your user's Docker MCP configuration file.
+---
 
-Destination path:
+4. CONFIGURE DOCKER MCP CUSTOM CATALOG
+Copy or append the contents of the "custom.yaml" file into your user's Docker MCP configuration file.
+
+DESTINATION PATH:
   Windows: c:\Users\[user]\.docker\mcp\catalogs\custom.yaml
   Linux: ~/.docker/mcp/catalogs/custom.yaml
 
-----------------------------------------------
-5. CONFIGURE CLAUDE DESKTOP
-----------------------------------------------
-To connect the Claude application to your running MCP Server, copy the "claude_desktop_config.json" file to the specified application data directory and then update the configuration.
+---
 
-1. Copy the file:
-   Copy "claude_desktop_config.json" to: %APPDATA%\Claude\claude_desktop_config.json
+5. MAKE THE MCP SERVER ACCESSIBLE REMOTELY (OPTIONAL)
+This is required if the application that needs to access the MCP server is not on the same host.
+To make the MCP Server accessible remotely, you must run an MCP Gateway.
+Rune the bellow command to make it accessible over http://0.0.0.0:8811/mcp
 
-2. Modify Home directory:
-   Edit the copied configuration file and replace the placeholder Home directory 
-   Windows: C:\\Users\\your_username/.docker/mcp:/mcp",
-   Linux: /home/your_username/.docker/mcp:/mcp",
-   Mac: /Users/your_username/.docker/mcp:/mcp",
+  docker run -d \
+    --restart=unless-stopped \
+    --name mcp-gateway \
+    -p 8811:8811 \
+    -v /var/run/docker.sock:/var/run/docker.sock \
+    -v $HOME/.docker/mcp:/mcp:ro \
+    docker/mcp-gateway \
+    --catalog=/mcp/catalogs/docker-mcp.yaml \
+    --catalog=/mcp/catalogs/custom.yaml \
+    --config=/mcp/config.yaml \
+    --registry=/mcp/registry.yaml \
+    --secrets=docker-desktop \
+    --watch=true \
+    --transport=streaming \
+    --port=8811
 
-----------------------------------------------
-6. CONFIGURE GEMINI CLI
-----------------------------------------------
-To connect the Gemini CLI application to your running MCP Server, copy the content of the "claude_desktop_config.json" file to the Gemini CLI settings JSON file.
-1. Copy the content of the file to: [Home]\.gemini\settings.json
 
-----------------------------------------------
-7. RELOAD CONFIG
-----------------------------------------------
-For the changes to take effect, completely close the application (Claude Desktop or Gemini CLI) and re-open it.
 
-----------------------------------------------
-8. ACCESS THE MCP SERVER REMOTELY
-----------------------------------------------
-1. To make the MCP Server accessible remotely, run the following commands (will become accessible over :8811).
-    docker run -d \
-      --restart=unless-stopped \
-      --name mcp-gateway \
-      -p 8811:8811 \
-      -v /var/run/docker.sock:/var/run/docker.sock \
-      -v $HOME/.docker/mcp:/mcp:ro \
-      docker/mcp-gateway \
-      --catalog=/mcp/catalogs/docker-mcp.yaml \
-      --catalog=/mcp/catalogs/custom.yaml \
-      --config=/mcp/config.yaml \
-      --registry=/mcp/registry.yaml \
-      --secrets=docker-desktop \
-      --watch=true \
-      --transport=streaming \
-      --port=8811
 
-2. Install Node.js:
-   Node.js is a pre-requisite to be installed. If not already installed, download and install from here: https://nodejs.org/en/download
+--------------------------------------------------
+SECTION 2: APPLICATION CONFIGURATION (OPTIONAL)
+--------------------------------------------------
 
-3. Use the below for the claude_desktop_config.json file (adjusting the IP accordingly)
+This section goes through sample configurations for some common applications.
+
+A. CONFIGURE CLAUDE DESKTOP (LOCAL)
+To connect the Claude application to the running MCP Server when both are running on the same host.
+
+1. COPY CONFIG FILE:
+  Copy "claude_desktop_config.json" to: %APPDATA%\Claude\claude_desktop_config.json
+
+2. MODIFY HOME DIRECTORY:
+  Edit the copied configuration file and replace the placeholder Home directory with the appropriate path for your OS:
+  - Windows: C:\\Users\\your_username/.docker/mcp:/mcp",
+  - Linux: /home/your_username/.docker/mcp:/mcp",
+  - Mac: /Users/your_username/.docker/mcp:/mcp",
+
+---
+
+B. CONFIGURE CLAUDE DESKTOP (REMOTE)
+To connect the Claude application to the running MCP Server when both are running on separate hosts.
+
+1. INSTALL NODE.JS:
+Node.js is a prerequisite for using 'mcp-remote'. If not installed, download and install it: https://nodejs.org/en/download
+
+2. CONFIGURE CLAUDE DESKTOP FOR REMOTE ACCESS:
+Use the following JSON structure for your 'claude_desktop_config.json' file, adjusting the IP address as needed to point to your remote MCP Server.
+
 {
-  "mcpServers": {
-    "netwitness": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "http://192.168.1.123:8811/mcp",
-		"--allow-http"
-      ]
-    }
-  }
+  "mcpServers": {
+    "netwitness": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://192.168.1.123:8811/mcp",
+        "--allow-http"
+      ]
+    }
+  }
 }
+
+
+---
+
+C. CONFIGURE GEMINI CLI
+Similar to the Claude configuration, but copy the content of the JSON configuration file into the Gemini CLI settings JSON file.
+
+  Copy content to: [Home]\.gemini\settings.json
+
+---
+
+D. CONFIGURE N8N
+To use the MCP Server within an n8n automation/AI Agent/AI Workflow.
+
+  Add an "AI Agent"
+  Add a "Tool" to the AI Agent
+  Chose "MCP Client Tool"
+    Endpoint: http://192.168.1.123:8811 (where 192.168.1.123 is the IP of your MCP server)
+    Server Transport: HTTP Streamable
+    Authentication: None
+
+---
+
+6. RELOAD CONFIG
+For configuration changes to take effect, completely close and then re-open the application (Claude Desktop or Gemini CLI).
+
