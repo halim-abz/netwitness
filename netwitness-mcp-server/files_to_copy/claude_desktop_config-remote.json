@@ -4,8 +4,8 @@
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://192.168.1.123:8000/mcp",
-		"--allow-http"
+        "http://192.168.1.123:8811/mcp",
+		    "--allow-http"
       ]
     }
   }

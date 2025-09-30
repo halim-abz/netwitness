@@ -1,16 +1,16 @@
 ==============================================
-LOCAL NETWITNESS MCP SERVER GUIDE
+NETWITNESS MCP SERVER GUIDE
 ==============================================
 
-This guide outlines the steps required to build, configure, and run the NetWitness MCP Server Docker image, and how to configure a related application. In this configuration, both the MCP Server and the Application (such as Claude Desktop or Gemini CLI) must be running on the same local host.
+This guide outlines the steps required to build, configure, and run the NetWitness MCP Server Docker image, and how to configure a related application.
 
 ----------------------------------------------
 1. BUILD THE DOCKER IMAGE
 ----------------------------------------------
 Navigate to the server directory and build the Docker image locally.
 
-  cd netwitness-mcp-local-server
-  docker build -t netwitness-mcp-local-server .
+  cd netwitness-mcp-server
+  docker build -t netwitness-mcp-server .
 
 ----------------------------------------------
 2. CONFIGURE ENVIRONMENT VARIABLES
@@ -64,3 +64,40 @@ To connect the Gemini CLI application to your running MCP Server, copy the conte
 7. RELOAD CONFIG
 ----------------------------------------------
 For the changes to take effect, completely close the application (Claude Desktop or Gemini CLI) and re-open it.
+
+----------------------------------------------
+8. ACCESS THE MCP SERVER REMOTELY
+----------------------------------------------
+1. To make the MCP Server accessible remotely, run the following commands (will become accessible over :8811).
+    docker run -d \
+      --restart=unless-stopped \
+      --name mcp-gateway \
+      -p 8811:8811 \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -v $HOME/.docker/mcp:/mcp:ro \
+      docker/mcp-gateway \
+      --catalog=/mcp/catalogs/docker-mcp.yaml \
+      --catalog=/mcp/catalogs/custom.yaml \
+      --config=/mcp/config.yaml \
+      --registry=/mcp/registry.yaml \
+      --secrets=docker-desktop \
+      --watch=true \
+      --transport=streaming \
+      --port=8811
+
+2. Install Node.js:
+   Node.js is a pre-requisite to be installed. If not already installed, download and install from here: https://nodejs.org/en/download
+
+3. Use the below for the claude_desktop_config.json file (adjusting the IP accordingly)
+{
+  "mcpServers": {
+    "netwitness": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://192.168.1.123:8811/mcp",
+		"--allow-http"
+      ]
+    }
+  }
+}

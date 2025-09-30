@@ -7,7 +7,7 @@ registry:
     title: "NetWitness"
     type: server
     dateAdded: "2025-09-20T00:00:00Z"
-    image: netwitness-mcp-local-server:latest
+    image: netwitness-mcp-server:latest
     ref: ""
     readme: ""
     toolsUrl: ""
