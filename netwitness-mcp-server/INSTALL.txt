@@ -21,9 +21,12 @@ Navigate to the server directory and build the Docker image locally.
 Set the required credentials and the NetWitness API URL using Docker MCP secrets.
 NOTE: Change the IP address and Port for your specific NetWitness environment. Common ports: Concentrator (50105), Broker (50104).
 
-  docker mcp secret set NETWITNESS_API_URL="https://192.168.1.200:50105"
+  docker mcp secret set NETWITNESS_API_URL="https://nw_concentrator_ip:50105"
   docker mcp secret set NETWITNESS_USERNAME="admin"
   docker mcp secret set NETWITNESS_PASSWORD="netwitness"
+  docker mcp secret set NW_ADMIN_URL="https://nw_admin_server_ip"
+  docker mcp secret set NW_ADMIN_USERNAME="admin"
+  docker mcp secret set NW_ADMIN_PASSWORD="netwitness"
 
 ---
 
@@ -48,7 +51,7 @@ DESTINATION PATH:
 5. MAKE THE MCP SERVER ACCESSIBLE REMOTELY (OPTIONAL)
 This is required if the application that needs to access the MCP server is not on the same host.
 To make the MCP Server accessible remotely, you must run an MCP Gateway.
-Rune the bellow command to make it accessible over http://0.0.0.0:8811/mcp
+Rune the bellow command to make it accessible over http://mcp_server_ip:8811/mcp
 
   docker run -d \
     --restart=unless-stopped \
@@ -104,7 +107,7 @@ Use the following JSON structure for your 'claude_desktop_config.json' file, adj
       "command": "npx",
       "args": [
         "mcp-remote",
-        "http://192.168.1.123:8811/mcp",
+        "http://mcp_server_ip:8811/mcp",
         "--allow-http"
       ]
     }
@@ -127,7 +130,7 @@ To use the MCP Server within an n8n automation/AI Agent/AI Workflow.
   Add an "AI Agent"
   Add a "Tool" to the AI Agent
   Chose "MCP Client Tool"
-    Endpoint: http://192.168.1.123:8811 (where 192.168.1.123 is the IP of your MCP server)
+    Endpoint: http://mcp_server_ip:8811
     Server Transport: HTTP Streamable
     Authentication: None
 
@@ -135,4 +138,3 @@ To use the MCP Server within an n8n automation/AI Agent/AI Workflow.
 
 6. RELOAD CONFIG
 For configuration changes to take effect, completely close and then re-open the application (Claude Desktop or Gemini CLI).
-

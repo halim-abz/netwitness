@@ -3,7 +3,7 @@ name: custom
 displayName: Custom MCP Servers
 registry:
   netwitness:
-    description: "Queries metadata from NetWitness."
+    description: "Queries metadata and alerts from NetWitness."
     title: "NetWitness"
     type: server
     dateAdded: "2025-09-20T00:00:00Z"
@@ -17,6 +17,7 @@ registry:
     tools:
       - name: query_sessions
       - name: query_metakey_values
+      - name: query_alerts
       - name: get_netwitness_meta_keys
       - name: get_netwitness_query_syntax
 
@@ -29,6 +30,15 @@ registry:
         example: "admin"
       - name: NETWITNESS_PASSWORD
         env: NETWITNESS_PASSWORD
+        example: "netwitness"
+      - name: NW_ADMIN_URL
+        env: NW_ADMIN_URL
+        example: "https://192.168.1.100"
+      - name: NW_ADMIN_USERNAME
+        env: NW_ADMIN_USERNAME
+        example: "admin"
+      - name: NW_ADMIN_PASSWORD
+        env: NW_ADMIN_PASSWORD
         example: "netwitness"
     metadata:
       category: security

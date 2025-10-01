@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-NetWitness MCP Server - Queries metadata from a NetWitness Concentrator or Broker.
+NetWitness MCP Server - Queries metadata from a NetWitness Concentrator or Broker and Alerts data from the Admin Server API.
 """
 import os
 import sys
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import httpx
 from mcp.server.fastmcp import FastMCP
 from urllib.parse import quote_plus
@@ -16,7 +16,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     stream=sys.stderr
 )
-logger = logging.getLogger("netwitness-server")
+logger = logging.getLogger("netwitness-mcp-server")
 
 # Initialize MCP server
 mcp = FastMCP("netwitness")
@@ -25,6 +25,36 @@ mcp = FastMCP("netwitness")
 API_URL = os.environ.get("NETWITNESS_API_URL", "")
 API_USERNAME = os.environ.get("NETWITNESS_USERNAME", "")
 API_PASSWORD = os.environ.get("NETWITNESS_PASSWORD", "")
+NW_ADMIN_URL = os.environ.get("NW_ADMIN_URL", "")
+NW_ADMIN_USERNAME = os.environ.get("NW_ADMIN_USERNAME", "")
+NW_ADMIN_PASSWORD = os.environ.get("NW_ADMIN_PASSWORD", "")
+
+# === HELPER FUNCTIONS ===
+def calculate_start_time(time_range: str) -> tuple[str, str]:
+    """Converts NetWitness-style time_range (e.g., '2d', '1h', '30m') to ISO 8601 start/end times required by the Alert API."""
+    now_utc = datetime.now(timezone.utc)
+    # The API requires ISO 8601 format: YYYY-MM-DDTHH:MM:SS.SSSZ [cite: 365, 366]
+    end_time = now_utc.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+    
+    duration_map = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
+    
+    try:
+        unit = time_range[-1].lower()
+        value = int(time_range[:-1])
+    except:
+        unit = 'h'
+        value = 1 # Default to 1 hour
+    
+    kwargs = {}
+    if unit in duration_map:
+        kwargs[duration_map[unit]] = value
+    else:
+        kwargs['hours'] = 1
+
+    start_time_dt = now_utc - timedelta(**kwargs)
+    start_time = start_time_dt.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
+    
+    return start_time, end_time
 
 # === RESOURCES ===
 @mcp.resource("netwitness://meta-keys")
@@ -663,7 +693,7 @@ async def query_sessions(
             formatted_output += f"\n\n**Total Sessions**: {len(set(item.get('group') for item in results if item.get('group')))}"
             
             return formatted_output.strip()
- 
+    
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error during NetWitness query: {e.response.status_code} - {e.response.text}")
         return f"❌ NetWitness API Error: {e.response.status_code} - {e.response.text}"
@@ -764,6 +794,162 @@ async def query_metakey_values(
         return f"❌ An unexpected error occurred: {str(e)}"
 
 
+async def get_netwitness_token() -> str | None:
+    """Authenticates with Admin Server's API by posting credentials to the token endpoint and retrieves a JWT."""
+    logger.info("Attempting to retrieve JWT token...")
+    # Authentication endpoint for NetWitness
+    auth_url = f"{NW_ADMIN_URL}/rest/api/auth/userpass"
+
+    if not NW_ADMIN_URL.strip() or not NW_ADMIN_USERNAME.strip() or not NW_ADMIN_PASSWORD.strip():
+        logger.error("Authentication details missing for token retrieval.")
+        return None
+
+    # Payload must be form-encoded (or sometimes JSON, but form-encoded is common)
+    # The API expects 'username' and 'password' fields.
+    payload = {
+        "username": NW_ADMIN_USERNAME,
+        "password": NW_ADMIN_PASSWORD
+    }
+    
+    # Headers to specify form-data content
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    try:
+        async with httpx.AsyncClient(verify=False) as client:
+            # We explicitly pass the credentials in the data field as form-encoded
+            response = await client.post(
+                auth_url, 
+                data=payload, 
+                headers=headers,
+                timeout=10
+            )
+            response.raise_for_status()
+            
+            try:
+                data = response.json()
+                token = data.get("accessToken")
+
+                if not token:
+                    logger.error("Token response missing 'accessToken' field.")
+                    return None
+                    
+            except Exception as json_e:
+                logger.error(f"Failed to decode JSON response from token endpoint: {json_e}")
+                logger.error(f"Response body: {response.text[:200]}...")
+                return None
+            # -----------------------------------------------------           
+ 
+            logger.info("Successfully retrieved JWT token.")
+            return token
+            
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Failed to get JWT token: HTTP {e.response.status_code} - {e.response.text}")
+        return None
+    except httpx.RequestError as e:
+        logger.error(f"Request error during token retrieval: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error during token retrieval: {e}", exc_info=True)
+        return None
+
+@mcp.tool()
+async def query_alerts(
+    time_range: str = "1h",
+    max_results: int = 100
+) -> str:
+    """Retrieves NetWitness alerts in a specified time range (e.g., 30m, 1h, 24h). This uses JWT authentication for the Alert API. Returns a list of alert records including title, severity, and timestamp."""
+    
+    logger.info(f"Executing query_alerts: time={time_range}, limit={max_results}")
+
+    if not NW_ADMIN_URL.strip():
+        return "❌ Error: NW_ADMIN_URL is not configured."
+    
+    # --- AUTHENTICATION STEP ---
+    jwt_token = await get_netwitness_token()
+    if not jwt_token:
+        return "❌ Authentication Error: Failed to retrieve a JWT token. Check NW_ADMIN_USERNAME/PASSWORD or NW_ADMIN_URL."
+    
+    headers = {
+        "NetWitness-Token": jwt_token,
+        "Accept": "application/json;charset=UTF-8"
+    }
+    # ---------------------------
+
+    try:
+        start_time, end_time = calculate_start_time(time_range)
+    except Exception as e:
+        return f"❌ Error: Invalid time_range format: {str(e)}"
+
+    # Using the 'Get Alerts by Date Range' API: GET /rest/api/alerts?since=<start-time>&until=<end-time>&pageSize=<pageSize>
+    url = f"{NW_ADMIN_URL}/rest/api/alerts?since={quote_plus(start_time)}&until={quote_plus(end_time)}&pageSize={max_results}"
+
+    try:
+        # Note: No auth=(...) here. The JWT token is passed in the headers.
+        async with httpx.AsyncClient(headers=headers, verify=False) as client:
+            response = await client.get(url, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+
+            results = data.get('items', [])
+           
+            if not results:
+                return f"🔍 No alerts found for the given time range ({time_range})."
+            
+            formatted_output = f"🚨 **NetWitness Alerts** (Last {time_range})\n\n"
+            
+            lines = []
+            for alert in results:
+                alert_id = alert.get('id')
+                alert_name = alert.get('name', 'N/A')
+                alert_priority = alert.get('priority')
+                alert_timestamp = alert.get('timestamp')
+                groupby_data = alert.get('alert', {})
+                alert_numevents = groupby_data.get('numEvents')
+                alert_ip_src = groupby_data.get('groupby_source_ip')
+                alert_ip_dst = groupby_data.get('groupby_destination_ip')
+                alert_port_dst = groupby_data.get('groupby_destination_port')
+                alert_domain = groupby_data.get('groupby_domain')
+                alert_domain_dst = groupby_data.get('groupby_domain_dst')
+
+                
+                # The timestamp in the alert response is typically in milliseconds epoch.
+                try:
+                    ts_dt = datetime.fromtimestamp(alert_timestamp / 1000, tz=timezone.utc)
+                    timestamp_str = ts_dt.isoformat().replace('+00:00', 'Z')
+                except:
+                    timestamp_str = str(alert_timestamp)
+                    
+                lines.append(f"**Name**: {alert_name}")
+                lines.append(f"- **Priority**: {alert_priority}")
+                lines.append(f"- **Time**: {timestamp_str}")
+                lines.append(f"- **Alert ID**: {alert_id}")
+                lines.append(f"- **Number of Events**: {alert_numevents}")
+                lines.append(f"- **Source IP**: {alert_ip_src}")
+                lines.append(f"- **Destination IP**: {alert_ip_dst}")
+                lines.append(f"- **Destination Port**: {alert_port_dst}")
+                lines.append(f"- **Domain**: {alert_domain}")
+                lines.append(f"- **Destination Domain**: {alert_domain_dst}")
+                lines.append("---")
+            
+            formatted_output += "\n".join(lines[:-1]) # remove trailing ---
+            formatted_output += f"\n\n**Total Alerts**: {len(results)}"
+            
+            return formatted_output.strip()
+
+    except httpx.HTTPStatusError as e:
+        error_msg = e.response.text
+        logger.error(f"HTTP error during NetWitness alert query: {e.response.status_code} - {error_msg}")
+        return f"❌ NetWitness Alert API Error: {e.response.status_code} - {error_msg}"
+    except httpx.RequestError as e:
+        logger.error(f"Request error during NetWitness alert query: {e}")
+        return f"❌ Request Error: Unable to connect to NetWitness API. {str(e)}"
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        return f"❌ An unexpected error occurred: {str(e)}"
+
+
 # === SERVER STARTUP ===
 if __name__ == "__main__":
     logger.info("Starting NetWitness MCP server...")
@@ -775,7 +961,7 @@ if __name__ == "__main__":
     if not API_PASSWORD:
         logger.warning("NETWITNESS_PASSWORD environment variable is not set.")
     
-    logger.info("Available tools: query_sessions, query_metakey_values, get_netwitness_meta_keys, get_netwitness_query_syntax")
+    logger.info("Available tools: query_sessions, query_metakey_values, query_alerts, get_netwitness_meta_keys, get_netwitness_query_syntax")
     logger.info("Available resources: netwitness://meta-keys, netwitness://query-syntax")
     
     try:
@@ -783,3 +969,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Server error: {e}", exc_info=True)
         sys.exit(1)
+        
