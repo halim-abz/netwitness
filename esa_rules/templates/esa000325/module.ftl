@@ -22,7 +22,7 @@ SELECT * FROM
 <#macro buildExtList inputlist>
 	<@compress single_line=true>
 	<#list inputlist as v>
-		asStringArray(filename).anyOf(v => v.toLowerCase() LIKE ('%${v.value}'))
+		asStringArray(filename).anyOf(v => v.toLowerCase() LIKE ('%.${v.value}'))
 		<#if v_has_next> OR </#if>
 	</#list>
 	</@compress>

@@ -1,0 +1,511 @@
+# Available meta keys
+This section lists the meta keys you are allowed to use for each protocol within the queries.
+- Never use meta keys that don't apply to protocol or service.
+- Never use a meta key not explicitly listed here.
+- For each meta key, it mentions its description and if mentioned, possible values for that meta key.
+
+## Common meta keys
+This section includes the meta keys that apply to any traffic.
+* direction
+    description: direction of the traffic where lateral is from internal to internal, outbound is from internal to the internet, and inbound is from the internet to internal
+    values: inbound, outbound, lateral
+* ip.src
+    description: source IP address
+* ip.dst
+    description: destination IP address
+* service
+    description: port-agnostic identified layer 7 protocol
+    values: 0 (OTHER),20 (FTPD),21 (FTP),22 (SSH),23 (TELNET),25 (SMTP),53 (DNS),67 (DHCP),69 (TFTP),80 (HTTP),88 (KERBEROS),110 (POP3),111 (SUNRPC),119 (NNTP),123 (NTP),135 (RPC),137 (NETBIOS),138 (NETBIOS-DGM),139 (SMB),143 (IMAP),161 (SNMP),179 (BGP),389 (LDAP),443 (SSL),465 (SMTPS),500 (ISAKMP),502 (MODBUS),520 (RIP),554 (RTSP),995 (POP3S),1024 (EXCHANGE),1080 (SOCKS),1122 (MSN IM),1344 (ICAP),1352 (NOTES),1433 (TDS),1521 (TNS),1533 (SAMETIME),1719 (H.323),1720 (RTP),1812 (RADIUS),1813 (RADIUS-ACCT),2000 (SKINNY),2040 (SOULSEEK),2049 (NFS),3270 (TN3270),3389 (RDP),3700 (DB2),5050 (YAHOO IM),5060 (SIP),5190 (AOL IM),5222 (Google Talk),5721 (Kaseya),5900 (VNC),5938 (TEAMVIEWER),6346 (GNUTELLA),6667 (IRC),6801 (Net2Phone),6881 (BITTORRENT),7001 (Oracle_T3),7310 (SCREENCONNECT),8000 (QQ),8002 (YCHAT),8019 (WEBMAIL),8082 (FIX),20000 (DNP3),49152 (JSON-RPC),51820 (WireGuard),1000000 (KERNEL),1000001 (USER),1000003 (SYSTEM),1000004 (AUTH),1000005 (LOGGER),1000006 (LPD),1000008 (UUCP),1000009 (SCHEDULE),1000010 (SECURITY),1000013 (AUDIT),1000014 (ALERT),1000015 (CLOCK)
+* eth.src
+    description: source MAC address
+* eth.dst
+    description: destination MAC address
+* ip.proto
+    description: the IP protocol used
+    values: udp,tcp,icmp,ipv6-icmp,hopopt,igmp,esp
+* tcp.dstport
+    description: destination port when TCP is used
+* tcp.srcport
+    description: source port when TCP is used
+* tcp.flags.desc
+    description: TCP flag
+    values: ack,psh,syn,fin,rst,cwr,ece,urg,ns
+* ip.srcport
+    description: source port number
+* ip.dstport
+    description: destination port number
+* streams
+    description: defines if the session is unidirectional (1) or bidirectional (2)
+    values: 1,2
+* udp.dstport
+    description: destination port when UDP is used
+* udp.srcport
+    description: Source port when UDP is used
+* country.src
+    description: source country identified based on the source IP address
+* country.dst
+    description: destination country identified based on the destination IP address
+* org.src
+    description: source organization who owns the source IP address
+* org.dst
+    description: destination organization who owns the destination IP address
+
+## HTTP meta keys
+This section includes the meta keys that specifically apply to HTTP traffic.
+* action - request method ('get', 'post', et al)
+* ad.computer.src - host credential from 'NTLMSSP' authorization
+* ad.domain.src - domain credential from 'NTLMSSP' authorization
+* ad.username.src - user credential from 'NTLMSSP' authorization
+* alias.host - request 'HOST:' header
+* alias.ip - request 'HOST:' header if IPv4
+* alias.ipv6 - request 'HOST:' header if IPv6
+* attachment - filename submitted in a POST request
+* client - request 'USER-AGENT:' header
+* content - 'CONTENT-TYPE' header
+* directory - request directory
+* email - proxy client if email address
+* error - response status code if not '2xx'
+* extension - request filename extension
+* filename - request filename
+* language - languages from language headers
+* orig_ip - IP address of proxy client
+* password - password credential from 'Basic' authorization
+* query - request querystring
+* referer - request 'REFERER:' header
+* result - (optional) HTTP response status message
+* result.code - (optional) HTTP response status code
+* server - response 'SERVER:' header
+* service - '80'
+* username - user credential from 'Basic' authorization
+
+## TLS/SSL/HTTPS meta keys
+This section includes the meta keys that specifically apply to SSL, TLS, HTTPS traffic.
+* alias.host - service name indicator, if hostname
+* alias.ip - service name indicator, if ipv4
+* alias.ipv6 - service name indicator, if ipv6
+* analysis.service - TLS/SSL characteristics of interest
+* error - Alert message description
+* service - '443'
+* version - 'SSL 2.0', 'SSL 3.0', 'TLS 1.0', 'TLS 1.1', 'TLS 1.2', 'TLS 1.3'
+
+### analysis.service
+This section includes specific meta values for the analysis.service meta key specific to TLS/SSL/HTTP. You must not use any values not explicitly mentioned.
+* SSL certificate chain incomplete
+* SSL certificate missing Issuer Organizational Name
+* SSL certificate missing Subject Organizational Name
+* SSL certificate no issuer
+* SSL certificate no subject
+* SSL certificate self-signed
+* certificate anomalous expiration date
+* certificate anomalous issued date
+* certificate domain validation
+* certificate expired
+* certificate expired within last week
+* certificate extended validation
+* certificate individual validation
+* certificate issued within last day
+* certificate issued within last month
+* certificate issued within last week
+* certificate long expiration
+* certificate organization validation
+
+## Kerberos meta keys
+This section includes the meta keys that specifically apply to Kerberos traffic.
+* action - Kerberos commands
+* ad.computer.dst - host to which user is attempting authentication
+* ad.computer.src - client source host
+* ad.domain.dst - domain to which user is attempting authentication
+* ad.domain.src - client source domain
+* ad.username.dst - user as which actions are performed
+* ad.username.src - client user
+* crypto - Kerberos cryptography suite used for session
+* error - Kerberos errors
+* service - '88'
+
+## LDAP meta keys
+This section includes the meta keys that specifically apply to LDAP traffic.
+* action - LDAP protocol operation
+* error - (optional) LDAP diagnostic messages if included in operational responses
+* password - if simple authentication, password used to authenticate to the LDAP server
+* result - (optional) meaning of non-zero result code from operational responses
+* result.code - (optional) non-zero numeric result code from operational responses
+* service - '389'
+* username - name used to authenticate to the LDAP server
+
+## SMB meta keys
+This section includes the meta keys that specifically apply to SMB traffic.
+* action - SMB or DCERPC operation
+* ad.computer.dst - target host of authentication
+* ad.computer.src - source host of authenticated user
+* ad.domain.dst - target domain of authentication
+* ad.domain.src - source domain of authenticated user
+* ad.username.dst - authenticated as user
+* ad.username.src - authenticated user
+* alias.host - target host of operation if hostname
+* alias.ip - target host of operation if IPv4
+* alias.ipv6 - target host of operation if IPv6
+* crypto - Kerberos crypto type used for authentication
+* directory - path directory
+* error - error response from server
+* extension - filename extension
+* filename - target of file operation
+* password - password from Tree Connect operation
+* service - '139'
+
+## DCERPC meta keys
+This section includes the meta keys that specifically apply to DCERPC traffic.
+* action - dcerpc message type, operation, wmi command
+* ad.computer.dst - authentication hostname
+* ad.computer.src - authenticated hostname
+* ad.domain.dst - authentication domain
+* ad.domain.src - authenticated domain
+* ad.username.dst - authentication username
+* ad.username.src - authenticated username
+* crypto - kerberos crypto type
+* error - dcerpc error messages
+* filename - endpoint UUID name
+* query - wmi parameters
+* service - '135'
+
+## DNS meta keys
+This section includes the meta keys that specifically apply to DNS traffic.
+* alias.host - hostnames of requests / answers
+* alias.ip - ipv4 addresses of requests / answers
+* alias.ipv6 - ipv6 addresses of requests / answers
+* analysis.service - dns characteristics of interest
+* dns.querytype - type of record in the dns query
+* dns.responsetype - type of record dns response
+* dns.resptext - contents of dns txt records
+* email - soa name
+* error - dns errors
+* service - '53'
+
+### analysis.service
+This section includes specific meta values for the analysis.service meta key specific to DNS. You must not use any values not explicitly mentioned.
+* anomalous dns message
+* anomalous or non-dns session on dns port
+* dns answer for uncommon record class
+* dns answer for unknown record class
+* dns answer for unknown record type
+* dns base36 txt record
+* dns base64 txt record
+* dns dynamic update
+* dns experimental record type
+* dns extremely large number of answers
+* dns extremely low auth ttl
+* dns extremely low ttl
+* dns invalid a record
+* dns invalid aaaa record
+* dns invalid edns version
+* dns invalid error code
+* dns invalid option code
+* dns invalid query type
+* dns large answer
+* dns large number of additional records
+* dns large number of answers
+* dns large number of authority records
+* dns large number of queries
+* dns long query
+* dns low ttl
+* dns obscure record type
+* dns obsolete record type
+* dns query contains answer records
+* dns query contains authority records
+* dns query for uncommon record class
+* dns query for unknown record class
+* dns query for unknown record type
+* dns reserved record type
+* dns single request response
+* dns unnasigned record type
+* dns unsolicited response records
+* dns update for unknown record class
+* dns update for unknown record type
+* dns z reserved present
+* hostname looks like ip address
+* large session dns port
+* large session dns service
+* loopback resolution of non-local name
+* outbound dns
+* suspicious traffic port 53
+
+## IMAP meta keys
+This section includes the meta keys that specifically apply to IMAP traffic.
+* action - IMAP command issued
+* error - IMAP error
+* password - password credential provided to server
+* service - '143'
+* username - user credential provided to server'
+
+## MAIL meta keys
+This section includes the meta keys that specifically apply to MAIL traffic.
+* action - mail action performed: 'sendfrom, 'sendto', 'attach'
+* alias.host - hostname values from x-originating-ip headers, received headers, and (optional) email addresses
+* alias.ip - ipv4 values from x-originating-ip headers, received headers, and (optional) email addresses
+* alias.ipv6 - ipv6 values from x-originating-ip headers, received headers, and (optional) email addresses
+* attachment - filenames of email attachments
+* client - values from x-mailer: headers
+* content - 'mail', value of Content-Type headers within messages
+* email - email address found within messages
+* email.dst - (optional) message recipients
+* email.src - (optional) message originators
+* extension - extension from filenames of email attachments
+* fullname - comment portion of addresses, typically a name
+* fullname.dst - (optional) comment portion of recipient addresses
+* fullname.src - (optional) comment portion of sender addresses
+* subject - values from subject: headers
+
+## SCCP meta keys
+This section includes the meta keys that specifically apply to SCCP traffic.
+* fullname - calling and called party names
+* phone - calling and called party numbers
+* service - '2000'
+
+## QQ meta keys
+This section includes the meta keys that specifically apply to QQ traffic.
+* action - QQ command
+* service - '8000'
+* username - user credential provided to server
+
+## RTMP meta keys
+This section includes the meta keys that specifically apply to RTMP traffic.
+* alias.host - target host of RTMP url if name
+* alias.ip - target host of RTMP url if IPv4
+* alias.ipv6 - target host of RTMP url if IPv6
+* content - 'RTMPT' for RTMPT over HTTP
+* directory - target directory of RTMP url
+* extension - filename extension of RTMP url
+* filename - target file of RTMP url
+* query - querystring parameters of RTMP url
+* service - '1935'
+
+## SCREENCONNECT meta keys
+This section includes the meta keys that specifically apply to SCREENCONNECT traffic.
+* alias.host - connection destination host if hostname
+* alias.ip - connection destination host if IPv4
+* alias.ipv6 - connection destination host if IPv6
+* service - '7310'
+
+## SIP meta keys
+This section includes the meta keys that specifically apply to SIP traffic.
+* alias.host - target host if name
+* alias.ip - target host if IPv4
+* alias.ipv6 - target host if IPv6
+* content - value of Content-Type header
+* email - sender and recipient addresses
+* error - value SIP error response
+* fullname - sender and recipient names
+* service - '5060'
+* username - address from SIP request
+
+## SNMP meta keys
+This section includes the meta keys that specifically apply to SNMP traffic.
+* action - SNMP PDU Operation type
+* error - PDU error status if non-zero
+* password - SNMP community string
+* service - '161'
+
+## NFS meta keys
+This section includes the meta keys that specifically apply to NFS traffic.
+* action - NFS command
+* alias.host - target host of NFS command if name
+* alias.ip - target host of NFS command if IPv4
+* alias.ipv6 - target host of NFS command if IPv6
+* directory - target directory of NFS command
+* error - NFS errors
+* extension - filename extension
+* filename - target file of NFS command
+* service - '2049'
+
+## SOCKS meta keys
+This section includes the meta keys that specifically apply to SOCKS traffic.
+* action - SOCKS request: 'connect', 'bind', 'udp associate'
+* alias.host - target host of SOCKS request, if name
+* alias.ip - target host of SOCKS request, if IPv4
+* alias.ipv6 - target host of SOCKS request, if IPv6
+* password - password credential provided to SOCKS server
+* service - '1080'
+* username - user credential provided to SOCKS server
+
+## TDS meta keys
+This section includes the meta keys that specifically apply to TDS traffic.
+* action - SQL command: 'bulk write', 'login', 'rpc request', or batch command performed
+* service - '1433'
+* sql - SQL query performed
+
+## GNUTELLA meta keys
+This section includes the meta keys that specifically apply to GNUTELLA traffic.
+* action - gnutella command: 'connect', 'get'
+* service - '6346'
+
+## SMTP meta keys
+This section includes the meta keys that specifically apply to SMTP traffic.
+* action - SMTP command
+* alias.host - host from client or server greeting banner (if hostname)
+* alias.ip - host from client or server greeting banner (if IPv4 address)
+* alias.ipv6 - host from client or server greeting banner (if IPv6 address)
+* email - address from MAIL FROM and RCPT TO request
+* email.dst - address from RCPT TO, VRFY, and EXPN requests (optional)
+* email.src - address from MAIL FROM request (optional)
+* error - error code from SMTP responses
+* service - '25'
+
+## VNC meta keys
+This section includes the meta keys that specifically apply to VNC traffic.
+* action - 'login'
+* error - 'login failure'
+* service - '5900'
+
+## FTP meta keys
+This section includes the meta keys that specifically apply to FTP traffic.
+* action - FTP command
+* directory - target directory of FTP command
+* extension - extension of filename
+* filename - target filename of FTP command
+* link - query parameters for identification of corresponding data session
+* password - password credential provided to server
+* service - '21'
+* username - user credential provided to server
+
+## POP3 meta keys
+This section includes the meta keys that specifically apply to POP3 traffic.
+* action - POP command
+* ad.computer.src - host credential if NTLMSSP
+* ad.domain.src - domain credential if NTLMSSP
+* ad.username.src - user credential if NTLMSSP
+* error - POP error
+* password - password credential provided to server
+* service - '110'
+* username - username credential provided to serve
+
+## MODBUS meta keys
+This section includes the meta keys that specifically apply to MODBUS traffic.
+* action - MODBUS protocol function
+* device.type - device identification
+* error - MODBUS error responses
+* service - '502'
+
+## SSH meta keys
+This section includes the meta keys that specifically apply to SSH traffic.
+* client - SSH client software name
+* crypto - cryptography suite used for encryption of the session
+* server - SSH server software name
+* service - '22'
+* version - client and server protocol version
+
+## ICMP meta keys
+This section includes the meta keys that specifically apply to ICMP traffic.
+* action - icmp type meaning
+* analysis.session - other icmp characteristics
+* error - icmp code meaning
+* icmp.code - raw icmp code
+* icmp.type - raw icmp type
+
+### analysis.session
+This section includes specific meta values for the analysis.session meta key specific to ICMP. You must not use any values not explicitly mentioned.
+* reserved icmp type
+
+## RTSP meta keys
+This section includes the meta keys that specifically apply to RTSP traffic.
+* action - RTSP request method
+* alias.host - uri host, if hostname
+* alias.ip - uri host, if IPv4
+* alias.ipv6 - uri host, if IPv6
+* directory - uri path
+* extension - uri filename extension
+* filename - uri filename
+* query - uri querystring
+* service - '554'
+
+## TFTP meta keys
+This section includes the meta keys that specifically apply to TFTP traffic.
+* action - 'read', 'write'
+* directory - target directory of TFTP command
+* extension - filename extension of target filename
+* filename - target filename of TFTP command
+* service - '69'
+
+## DB2 meta keys
+This section includes the meta keys that specifically apply to DB2 traffic.
+* query - db2 database query
+* service - '3700'
+
+## IRC meta keys
+This section includes the meta keys that specifically apply to IRC traffic.
+* action - IRC command
+* alias.host - target host of IRC command, if name
+* alias.ip - target host of IRC command, if IPv4
+* alias.ipv6 - target host of IRC command, if IPv6
+* group - target channel of IRC command
+* message - message sent or received
+* password - password credential provided to server
+* service - '6667'
+* subject - text of topic command
+* username - username credential provided to server
+
+## DHCP meta keys
+This section includes the meta keys that specifically apply to DHCP traffic.
+* alias.host - client hostname, client fqdn
+* alias.ip - client ipv4, server ipv4
+* alias.ipv6 - client ipv6, server ipv6
+* alias.mac - client identifier, client hardware
+* extension - filename extension of bootfile
+* filename - bootfile
+* service - '67'
+
+## RDP meta keys
+This section includes the meta keys that specifically apply to RDP traffic.
+* alias.host - client name
+* language - keyboard type and layout
+* service - '3389'
+* username - username
+
+## RADIUS meta keys
+This section includes the meta keys that specifically apply to RADIUS traffic.
+* action - packet type for requests and non-rejection responses
+* alias.ip - attribute type 8, 'Framed IP Address'
+* error - packet type for rejection responses
+* phone - attribute type 31, 'Calling Station ID'
+* service - '1812' for RADIUS, '1813' for RADIUS-ACCOUNTING
+* username - attribute type 1, 'User Name'
+
+## NETBIOS meta keys
+This section includes the meta keys that specifically apply to NETBIOS traffic.
+* action - opcode value from NBNS
+* alias.host - server host if name
+* alias.ip - server host if IPv4
+* alias.ipv6 - server host if IPv6
+* service - '137' (NBNS), '138' (NBDS), '139' (NBSS)
+
+## QUIC meta keys
+This section includes the meta keys that specifically apply to QUIC traffic.
+* alias.host - sni from hello if hostname
+* alias.ip - sni from hello if IPv4
+* alias.ipv6 - sni from hello if IPv6
+* client - client string from hello
+* service - '443'
+
+## NTLMSSP meta keys
+This section includes the meta keys that specifically apply to NTLMSSP traffic.
+* ad.computer.src - host credential provided to server
+* ad.domain.src - domain credential provided to server
+* ad.username.src - user credential provided to server
+
+## BITTORRENT meta keys
+This section includes the meta keys that specifically apply to BITTORRENT traffic.
+* filename - name of file transferred
+* service - '6881'
+
+## DNP3 meta keys
+This section includes the meta keys that specifically apply to DNP3 traffic.
+* action - dnp3 function
+* device.host - client identifier, server identifier
+* error - dnp3 errors
+* service - '20000'
+
+## TNS meta keys
+This section includes the meta keys that specifically apply to TNS traffic.
+* client - client program
+* database - Service Name
+* host.src - client host
+* service - 1521
+* user - client username

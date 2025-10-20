@@ -1,23 +1,43 @@
+//need to enable longdec_src and latdec_src in GeoIP2 Parser GeoIP2="metakeys=latdec.src,longdec.src,latdec.dst,longdec.dst"
+
+// Window to store the last geolocation from the user
 @RSAPersist
-create window MultiDistance.win:time(60 min).std:unique(ip_src,calc,latdec_dst,longdec_dst) (
-    ip_src string,
-    latdec_dst double,
-    longdec_dst double,
-    calc double
+CREATE WINDOW ImpossibleTravel.win:time(1 day).std:unique(user_dst) (
+    user_dst string,
+    latdec_src float,
+    longdec_src float,
+    event_time long
 );
 
-@Name('InsertDistance')
-INSERT INTO MultiDistance
+// Insert the last geolocation for the user
+@Name('InsertLatestLocation')
+INSERT INTO ImpossibleTravel
 SELECT
-    ip_src,latdec_dst,longdec_dst,
-    (Math.acos(Math.sin(1.2868)*Math.sin(latdec_dst)+Math.cos(1.2868)*Math.cos(latdec_dst)*Math.cos(longdec_dst-103.8503))*7.9) as calc
+    user_dst,latdec_src,longdec_src,event_time
 FROM Event(
-    direction = 'outbound' AND latdec_dst IS NOT NULL AND longdec_dst IS NOT NULL
+    direction = 'inbound'
+    AND user_dst IS NOT NULL
+    AND latdec_src IS NOT NULL
+    AND longdec_src IS NOT NULL
 );
 
-@Name('DetectDistance')
-@RSAAlert(oneInSeconds=1800,identifiers={"ip_src","calc"})
-SELECT window(*)
-FROM MultiDistance
-GROUP BY ip_src
-HAVING count(distinct calc) > 1 output first every 60 min;
+// Calculate the time to travel between the 2 latest geolocations for the user and alert if it is longer than the time difference between the 2 events
+@Name('DetectImpossibleTravel')
+@RSAAlert(oneInSeconds=1800,identifiers={"user_dst","calc"})
+SELECT
+    a.user_dst,
+    a.latdec_src,
+    a.longdec_src,
+    a.event_time,
+    b.user_dst,
+    b.latdec_src,
+    b.longdec_src,
+    b.event_time
+FROM
+    Event(direction='inbound' AND user_dst IS NOT NULL).win:length(1) AS a
+    JOIN ImpossibleTravel AS b
+    ON a.user_dst = b.user_dst
+WHERE (
+(Math.acos(Math.sin(b.latdec_src)*Math.sin(a.latdec_src)+Math.cos(b.latdec_src)*Math.cos(a.latdec_src)*Math.cos(a.longdec_src-b.longdec_src))*6371/800) > ((a.event_time - b.event_time)/3600000)
+)
+OUTPUT FIRST EVERY 60 min;

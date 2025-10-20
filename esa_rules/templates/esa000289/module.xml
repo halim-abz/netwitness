@@ -42,6 +42,7 @@
 			<desc ref="$domain_list_desc"/>
 			<value type="string">microsoft.com</value>
 			<value type="string">office.com</value>
+			<value type="string">forcepoint.com</value>
 		</variable>
 		<variable id="top10kfeed_enabled">
 			<name ref="$top10kfeed_name"/>

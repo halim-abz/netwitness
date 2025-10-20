@@ -33,8 +33,10 @@
 		<variable id="domain_list" is_array="true">
 			<name ref="$domain_list_name"/>
 			<desc ref="$domain_list_desc"/>
-			<value type="string">trendmicro.com</value>
 			<value type="string">kaspersky-labs.com</value>
+			<value type="string">spamhaus.net</value>
+			<value type="string">trendmicro.com</value>
+			<value type="string">webex.com</value>
 		</variable>
 		<variable id="alert_suppression">
 			<name ref="$alert_suppression_name"/>
