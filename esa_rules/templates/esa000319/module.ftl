@@ -1,5 +1,5 @@
 /*
-Version: 2
+Version: 3
 */
 module ${module_id};
 
@@ -11,25 +11,21 @@ SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</
 
 //Window to store new data
 @RSAPersist	
-CREATE WINDOW NewUserKrbtgt.win:keepall().std:unique(ad_username_src) (ad_username_src string, time long);
+CREATE WINDOW NewUserKrbtgt.win:time(${phaseout_days?c days).std:unique(ad_username_src) (ad_username_src string);
 
-//For incoming events, if value already exists, update timestamp, if not, create new entry
-ON Event(medium = 1 AND isOneOfIgnoreCase(action,{'kerberos tgs request'}) AND ad_username_dst IN ('krbtgt')) as e
-MERGE NewUserKrbtgt as w
-WHERE w.ad_username_src = e.ad_username_src
-WHEN MATCHED
-    THEN UPDATE SET w.time = e.time
-WHEN NOT MATCHED
-    THEN INSERT SELECT e.ad_username_src as ad_username_src, e.time as time;
+//Insert observed ad_username_src to learning window
+INSERT INTO NewUserKrbtgt
+SELECT ad_username_src
+FROM Event (
+    medium = 1
+    AND isOneOfIgnoreCase(action,{'kerberos tgs request'})
+    AND ad_username_dst IN ('krbtgt')
+);
 
-//Compare to ad_username_src stored in the window
+//Compare to ad_username_src stored in the window and alert if new
+@Name('${module_id}_Alert')
 @RSAAlert
 SELECT *
-FROM Event(ad_username_src NOT IN (SELECT ad_username_src FROM NewUserKrbtgt) AND medium = 1 AND isOneOfIgnoreCase(action,{'kerberos tgs request'}) AND ad_username_dst IN ('krbtgt')
+FROM Event(medium = 1 AND isOneOfIgnoreCase(action,{'kerberos tgs request'}) AND ad_username_dst IN ('krbtgt') AND ad_username_src NOT IN (SELECT ad_username_src FROM NewUserKrbtgt)
 AND current_timestamp > (SELECT learningPhase FROM NewUserKrbtgt_learning))
 OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
-
-//Every day, clear values older than x days
-ON PATTERN [every timer:interval(1 day)]
-DELETE FROM NewUserKrbtgt
-WHERE time < current_timestamp.minus(${phaseout_days?c} days);

@@ -1,5 +1,5 @@
 /*
-Version: 2
+Version: 3
 */
 module ${module_id};
 
@@ -11,25 +11,20 @@ SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</
 
 //Window to store new data
 @RSAPersist	
-CREATE WINDOW NewSSHDest.win:keepall().std:unique(ip_dst) (ip_dst string, time long);
+CREATE WINDOW NewSSHDest.win:time(${phaseout_days?c days).std:unique(ip_dst) (ip_dst string);
 
-//For incoming events, if value already exists, update timestamp, if not, create new entry
-ON Event(service = 22 AND direction = 'outbound') as e
-MERGE NewSSHDest as w
-WHERE w.ip_dst = e.ip_dst
-WHEN MATCHED
-    THEN UPDATE SET w.time = e.time
-WHEN NOT MATCHED
-    THEN INSERT SELECT e.ip_dst as ip_dst, e.time as time;
+//Insert observed ip_dst to learning window
+INSERT INTO NewSSHDest
+SELECT ip_dst
+FROM Event (
+    service = 22
+    AND direction = 'outbound'
+);
 
-//Compare to ip_dst stored in the window
+//Compare to ip_dst stored in the window and alert if new
+@Name('${module_id}_Alert')
 @RSAAlert
 SELECT *
-FROM Event(ip_dst NOT IN (SELECT ip_dst FROM NewSSHDest) AND service = 22 AND direction = 'outbound'
+FROM Event(service = 22 AND direction = 'outbound' AND ip_dst NOT IN (SELECT ip_dst FROM NewSSHDest)
 AND current_timestamp > (SELECT learningPhase FROM NewSSHDest_learning))
 OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
-
-//Every day, clear values older than x days
-ON PATTERN [every timer:interval(1 day)]
-DELETE FROM NewSSHDest
-WHERE time < current_timestamp.minus(${phaseout_days?c} days);

@@ -1,5 +1,5 @@
 /*
-Version: 2
+Version: 3
 */
 module ${module_id};
 
@@ -11,25 +11,17 @@ SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</
 
 //Window to store new data
 @RSAPersist	
-CREATE WINDOW NewCA.win:keepall().std:unique(ssl_ca) (ssl_ca string, time long);
+CREATE WINDOW NewCA.win:time(${phaseout_days?c days).std:unique(ssl_ca) (ssl_ca string);
 
-//For incoming events, if value already exists, update timestamp, if not, create new entry
-ON Event(ssl_ca IS NOT NULL) as e
-MERGE NewCA as w
-WHERE w.ssl_ca = e.ssl_ca
-WHEN MATCHED
-    THEN UPDATE SET w.time = e.time
-WHEN NOT MATCHED
-    THEN INSERT SELECT e.ssl_ca as ssl_ca, e.time as time;
+//Insert observed ssl_ca to learning window
+INSERT INTO NewCA
+SELECT ssl_ca
+FROM Event (ssl_ca IS NOT NULL);
 
-//Compare to ssl_ca stored in the window
+//Compare to ssl_ca stored in the window and alert if new
+@Name('${module_id}_Alert')
 @RSAAlert
 SELECT *
-FROM Event(ssl_ca NOT IN (SELECT ssl_ca FROM NewCA) AND ssl_ca IS NOT NULL
+FROM Event(ssl_ca IS NOT NULL AND ssl_ca NOT IN (SELECT ssl_ca FROM NewCA)
 AND current_timestamp > (SELECT learningPhase FROM NewCA_learning))
 OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
-
-//Every day, clear values older than x days
-ON PATTERN [every timer:interval(1 day)]
-DELETE FROM NewCA
-WHERE time < current_timestamp.minus(${phaseout_days?c} days);

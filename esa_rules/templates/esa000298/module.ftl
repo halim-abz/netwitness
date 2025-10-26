@@ -1,5 +1,5 @@
 /*
-Version: 2
+Version: 3
 */
 module ${module_id};
 
@@ -11,25 +11,21 @@ SELECT current_timestamp<#if learning_days != 0>.plus(${learning_days?c} days)</
 
 //Window to store new data
 @RSAPersist	
-CREATE WINDOW NewPS1Download.win:keepall().std:unique(ip_src) (ip_src string, time long);
+CREATE WINDOW NewPS1Download.win:time(${phaseout_days?c days).std:unique(ip_src) (ip_src string);
 
-//For incoming events, if value already exists, update timestamp, if not, create new entry
-ON Event(filename IS NOT NULL AND direction = 'outbound' AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('ps1'))) as e
-MERGE NewPS1Download as w
-WHERE w.ip_src = e.ip_src
-WHEN MATCHED
-    THEN UPDATE SET w.time = e.time
-WHEN NOT MATCHED
-    THEN INSERT SELECT e.ip_src as ip_src, e.time as time;
+//Insert observed ip_src to learning window
+INSERT INTO NewPS1Download
+SELECT ip_src
+FROM Event (
+    filename IS NOT NULL
+    AND direction = 'outbound'
+    AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('ps1'))
+);
 
-//Compare to ip_src stored in the window
+//Compare to ip_src stored in the window and alert if new
+@Name('${module_id}_Alert')
 @RSAAlert
 SELECT *
-FROM Event(ip_src NOT IN (SELECT ip_src FROM NewPS1Download) AND filename IS NOT NULL AND direction = 'outbound' AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('ps1'))
+FROM Event(filename IS NOT NULL AND direction = 'outbound' AND asStringArray(extension).anyOf(v => v.toLowerCase() IN ('ps1')) AND ip_src NOT IN (SELECT ip_src FROM NewPS1Download)
 AND current_timestamp > (SELECT learningPhase FROM NewPS1Download_learning))
 OUTPUT ALL<#if group_hours != 0> EVERY ${group_hours?c} hours</#if>;
-
-//Every day, clear values older than x days
-ON PATTERN [every timer:interval(1 day)]
-DELETE FROM NewPS1Download
-WHERE time < current_timestamp.minus(${phaseout_days?c} days);

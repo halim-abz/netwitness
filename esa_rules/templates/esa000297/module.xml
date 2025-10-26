@@ -6,8 +6,8 @@
 	<type>ootb</type>
 	<severity>3</severity>
 	<enabled>false</enabled>
-	<last_modified>1727358727</last_modified>
-	<revision>2</revision>
+	<last_modified>1761493873</last_modified>
+	<revision>3</revision>
 	<variables>
 		<variable id="learning_days">
 			<name ref="$learning_days_name"/>
