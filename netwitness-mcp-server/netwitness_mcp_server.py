@@ -613,18 +613,18 @@ def get_query_syntax() -> str:
 """
 
 # === REQUIRED FOR GEMINI CLI ===
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True})
 async def get_netwitness_meta_keys() -> str:
     """Retrieves the complete list of available NetWitness meta keys and their descriptions for use in query_sessions and query_metakey_values. Use this tool *before* constructing any query to understand the available fields."""
     return get_meta_keys()
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True})
 async def get_netwitness_query_syntax() -> str:
     """Retrieves the NetWitness query syntax guide, including operators, clauses (WHERE, SELECT), time ranges, and example queries. Use this tool *before* constructing any query to ensure correct syntax."""
     return get_query_syntax()
 
 # === MCP TOOLS ===
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True,"sensitiveHint": "High"})
 async def query_sessions(
     where_clause: str = "", 
     select_clause: str = "",
@@ -632,7 +632,7 @@ async def query_sessions(
     max_results: int = 1000
 ) -> str:
     """Queries NetWitness sessions using SQL-like WHERE clause syntax. IMPORTANT: Check resources netwitness://meta-keys for available fields and netwitness://query-syntax for syntax examples before building queries. Time range examples: 30m, 1h, 24h. Returns detailed session records."""
-    
+
     logger.info(f"Executing query_sessions: select='{select_clause}', where='{where_clause}', time={time_range}, limit={max_results}")
 
     if not API_URL.strip():
@@ -705,7 +705,7 @@ async def query_sessions(
         return f"❌ An unexpected error occurred: {str(e)}"
 
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True,"sensitiveHint": "High"})
 async def query_metakey_values(
     meta_key: str,
     where_clause: str = "",
@@ -854,7 +854,7 @@ async def get_netwitness_token() -> str | None:
         logger.error(f"Unexpected error during token retrieval: {e}", exc_info=True)
         return None
 
-@mcp.tool()
+@mcp.tool(annotations={"readOnlyHint": True,"sensitiveHint": "High"})
 async def query_alerts(
     time_range: str = "1h",
     max_results: int = 100
