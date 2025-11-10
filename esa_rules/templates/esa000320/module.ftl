@@ -11,8 +11,9 @@ module ${module_id};
 SELECT window(*) FROM 
 	Event(
 		medium = 1
-		AND	'syn' = ALL( tcp_flags_desc )
-		AND	'ack' != ALL( tcp_flags_desc )
+		AND streams = 1
+		AND	'syn' = ANY( tcp_flags_desc )
+		AND	'ack' != ANY( tcp_flags_desc )
 		<#if ipsrc_list[0].value != "">
 		AND	ip_src NOT IN (<@buildList inputlist=ipsrc_list/>)
 		</#if>
