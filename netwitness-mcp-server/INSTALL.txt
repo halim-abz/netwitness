@@ -19,7 +19,7 @@ Navigate to the server directory and build the Docker image locally.
 
 2. CONFIGURE ENVIRONMENT VARIABLES (SECRETS)
 Set the required credentials and the NetWitness API URL using Docker MCP secrets.
-NOTE: Change the IP address and Port for your specific NetWitness environment. Common ports: Concentrator (50105), Broker (50104).
+NOTE: Change the IP address and Port for your specific NetWitness environment. Common ports: Concentrator (50105), Broker (50103).
 
   docker mcp secret set NETWITNESS_API_URL="https://nw_concentrator_ip:50105"
   docker mcp secret set NETWITNESS_USERNAME="admin"

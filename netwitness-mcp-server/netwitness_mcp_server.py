@@ -666,9 +666,9 @@ async def query_sessions(
             results = data.get('results', {}).get('fields', [])
             
             if not results:
-                return f"🔍 No results found for the given query in the last {time_range}."
+                return f"No results found for the given query in the last {time_range}."
             
-            formatted_output = f"📊 **NetWitness Query Results** (Last {time_range})\n\n"
+            formatted_output = f"**NetWitness Query Results** (Last {time_range})\n\n"
             
             if where_clause.strip():
                 formatted_output += f"*Filter: {where_clause}*\n\n"
@@ -761,10 +761,10 @@ async def query_metakey_values(
             results = data.get('results', {}).get('fields', [])
             
             if not results:
-                return f"🔍 No values found for meta key '{meta_key}' with the given filters in the last {time_range}."
+                return f"No values found for meta key '{meta_key}' with the given filters in the last {time_range}."
             
             # Format the output
-            formatted_output = f"📊 **Top {limit} '{meta_key}' Values** (Last {time_range})\n\n"
+            formatted_output = f"**Top {limit} '{meta_key}' Values** (Last {time_range})\n\n"
             
             if where_clause.strip():
                 formatted_output += f"*Filter: {where_clause}*\n\n"
@@ -895,9 +895,9 @@ async def query_alerts(
             results = data.get('items', [])
            
             if not results:
-                return f"🔍 No alerts found for the given time range ({time_range})."
+                return f"No alerts found for the given time range ({time_range})."
             
-            formatted_output = f"🚨 **NetWitness Alerts** (Last {time_range})\n\n"
+            formatted_output = f"**NetWitness Alerts** (Last {time_range})\n\n"
             
             lines = []
             for alert in results:
