@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000326
+Title=Bandwidth Utilization Deviation
+Medium=packet
+Tags=
+Description=Continuously learns the bandwidth utilization for IPs communicating outbound. Compares the current hourly utilization with the average utilization on that same hour of the same day of the week from the past 4 weeks and generates an alert if it increased significantly.
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags=
+MitreIDs=
+Testdata=
