@@ -9,9 +9,10 @@ interface GlobeViewProps {
   data: GraphData;
   onItemClick: (item: Node | Link) => void;
   isDark: boolean;
+  selectedItem?: Node | Link | null;
 }
 
-export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps) {
+export default function GlobeView({ data, onItemClick, isDark, selectedItem }: GlobeViewProps) {
   const globeRef = useRef<any>(null);
   const [countries, setCountries] = useState({ features: [] });
   const [autoRotate, setAutoRotate] = useState(true);
@@ -132,7 +133,7 @@ export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps)
       nodeSeverities.set(targetId, Math.max(severity, nodeSeverities.get(targetId) || 0));
     });
 
-    const getColorFromSeverity = (sev: number) => sev === 2 ? '#ef4444' : sev === 1 ? '#f97316' : '#3b82f6';
+    const getColorFromSeverity = (sev: number) => sev === 2 ? '#BE3B37' : sev === 1 ? '#f97316' : '#3b82f6';
     const uniqueNodes = new Map<string, any>();
 
     filteredLinks.forEach((link: any) => {
@@ -250,11 +251,45 @@ export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps)
     }).filter(Boolean);
   }, [countries, showLabels, isDark]);
 
+  useEffect(() => {
+    if (selectedItem && globeRef.current) {
+      let targetLat: number | undefined;
+      let targetLng: number | undefined;
+      
+      if ('source' in selectedItem && 'target' in selectedItem) {
+        const sourceId = typeof selectedItem.source === 'string' ? selectedItem.source : selectedItem.source.id;
+        let ringNode = ringsData.find(r => r.node.id === sourceId);
+        
+        if (!ringNode) {
+          const targetId = typeof selectedItem.target === 'string' ? selectedItem.target : selectedItem.target.id;
+          ringNode = ringsData.find(r => r.node.id === targetId);
+        }
+
+        if (ringNode) {
+          targetLat = ringNode.lat;
+          targetLng = ringNode.lng;
+        }
+      } else if ('id' in selectedItem) {
+        const ringNode = ringsData.find(r => r.node.id === selectedItem.id);
+        if (ringNode) {
+          targetLat = ringNode.lat;
+          targetLng = ringNode.lng;
+        }
+      }
+
+      if (targetLat !== undefined && targetLng !== undefined) {
+        setAutoRotate(false);
+        setTimeout(() => {
+          if (globeRef.current) {
+            globeRef.current.pointOfView({ lat: targetLat, lng: targetLng, altitude: 2.0 }, 1000);
+          }
+        }, 50);
+      }
+    }
+  }, [selectedItem, ringsData]);
+
   const handleItemClick = (item: any, lat?: number, lng?: number) => {
     setAutoRotate(false);
-    if (globeRef.current && lat !== undefined && lng !== undefined) {
-      globeRef.current.pointOfView({ lat, lng, altitude: 1.5 }, 1000);
-    }
     onItemClick(item);
   };
 
@@ -269,6 +304,7 @@ export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps)
             globeImageUrl={isDark ? "//unpkg.com/three-globe/example/img/earth-dark.jpg" : "//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"}
             bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
             backgroundImageUrl={isDark ? "//unpkg.com/three-globe/example/img/night-sky.png" : ""}
+            backgroundColor={isDark ? "#020617" : "#f8fafc"}
             
             polygonsData={countries.features}
             polygonAltitude={0.01}
@@ -277,24 +313,59 @@ export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps)
             polygonStrokeColor={() => isDark ? '#334155' : '#cbd5e1'}
             
             arcsData={arcsData}
-            arcColor={(d: any) => d.isTrack ? [d.color[0] + '40', d.color[1] + '40'] : d.color}
+            arcColor={(d: any) => {
+              const isSelected = selectedItem === d.link;
+              if (isSelected) return ['#fef08a', '#eab308'];
+              return d.isTrack ? [d.color[0] + '40', d.color[1] + '40'] : d.color;
+            }}
           arcDashLength={(d: any) => d.isTrack ? null : 0.4}
           arcDashGap={(d: any) => d.isTrack ? null : 0.2}
           arcDashAnimateTime={(d: any) => d.isTrack ? null : 1500}
-          arcStroke={(d: any) => hoveredArc === d.link ? 1.5 : (d.isTrack ? 0.2 : 0.5)}
+          arcStroke={(d: any) => {
+            const isSelected = selectedItem === d.link;
+            return isSelected ? 2 : (hoveredArc === d.link ? 1.5 : (d.isTrack ? 0.2 : 0.5));
+          }}
           onArcHover={(d: any) => setHoveredArc(d ? d.link : null)}
           onArcClick={(d: any) => handleItemClick(d.link, d.startLat, d.startLng)}
           
           ringsData={ringsData}
-          ringColor={(d: any) => d.color}
-          ringMaxRadius={3}
+          ringColor={(d: any) => {
+            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
+            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
+              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
+              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
+            );
+            return isSelectedNode || isSelectedLink ? '#eab308' : d.color;
+          }}
+          ringMaxRadius={(d: any) => {
+            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
+            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
+              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
+              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
+            );
+            return isSelectedNode || isSelectedLink ? 5 : 3;
+          }}
           ringPropagationSpeed={2}
           ringRepeatPeriod={1000}
 
           pointsData={ringsData}
-          pointColor={(d: any) => d.color}
+          pointColor={(d: any) => {
+            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
+            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
+              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
+              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
+            );
+            return isSelectedNode || isSelectedLink ? '#eab308' : d.color;
+          }}
           pointAltitude={0.02}
-          pointRadius={0.5}
+          pointRadius={(d: any) => {
+            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
+            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
+              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
+              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
+            );
+            return isSelectedNode || isSelectedLink ? 1.0 : 0.5;
+          }}
           onPointClick={(d: any) => handleItemClick(d.node, d.lat, d.lng)}
 
           labelsData={labelsData}
@@ -312,7 +383,7 @@ export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps)
 
         <button
           onClick={() => setAutoRotate(!autoRotate)}
-          className="absolute bottom-6 right-6 p-3 bg-slate-900/80 border border-slate-700 rounded-full text-white shadow-lg hover:bg-slate-800 transition-colors backdrop-blur-sm z-10"
+          className="absolute bottom-6 right-6 p-3 bg-gray-900/80 border border-gray-700 rounded-full text-white shadow-lg hover:bg-gray-800 transition-colors backdrop-blur-sm z-10"
           title={autoRotate ? "Pause Rotation" : "Resume Rotation"}
         >
           {autoRotate ? <Pause size={20} /> : <Play size={20} />}
@@ -320,26 +391,26 @@ export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps)
       </div>
 
       {/* UI Overlay */}
-      <div className="hidden lg:flex w-80 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-l border-slate-200 dark:border-slate-800 flex-col h-full z-10 shrink-0">
-        <div className="p-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="hidden lg:flex w-80 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-l border-gray-200 dark:border-gray-800 flex-col h-full z-10 shrink-0">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <h2 className="text-lg font-bold mb-4">Network Telemetry</h2>
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-1">
+            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
                 <Activity size={14} />
                 <span className="text-xs font-semibold uppercase">Flows</span>
               </div>
               <div className="text-xl font-bold">{stats.flows}</div>
             </div>
-            <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-1">
+            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg">
+              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
                 <Users size={14} />
                 <span className="text-xs font-semibold uppercase">Unique IPs</span>
               </div>
               <div className="text-xl font-bold">{stats.ips}</div>
             </div>
-            <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-lg col-span-2">
-              <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-1">
+            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg col-span-2">
+              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
                 <Database size={14} />
                 <span className="text-xs font-semibold uppercase">Total Payload</span>
               </div>
@@ -349,63 +420,72 @@ export default function GlobeView({ data, onItemClick, isDark }: GlobeViewProps)
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-          <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400 mb-3">Live Feed</h3>
+          <h3 className="text-sm font-bold uppercase text-gray-500 dark:text-gray-400 mb-3">Live Feed</h3>
           
           <div className="relative mb-4 shrink-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
             <input 
               type="text" 
               placeholder="Filter IPs, service, country..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-100 dark:bg-slate-800 border-none rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:text-slate-200 outline-none transition-shadow"
+              className="w-full bg-gray-100 dark:bg-gray-800 border-none rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 dark:text-gray-200 outline-none transition-shadow"
             />
           </div>
 
           <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-            {liveFeed.map((item, i) => (
+            {liveFeed.map((item, i) => {
+              const isSelected = selectedItem === item.link;
+              return (
               <div 
                 key={i}
                 onClick={() => {
-                  const sNode = data.nodes.find(n => n.id === item.source);
-                  handleItemClick(item.link, sNode?.lat, sNode?.lng);
+                  let ringNode = ringsData.find(r => r.node.id === item.source);
+                  if (!ringNode) {
+                    ringNode = ringsData.find(r => r.node.id === item.target);
+                  }
+                  handleItemClick(item.link, ringNode?.lat, ringNode?.lng);
                 }}
-                className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 cursor-pointer transition-colors bg-slate-50 dark:bg-slate-800/50"
+                className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                  isSelected 
+                    ? 'border-yellow-400 dark:border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 shadow-[0_0_10px_rgba(250,204,21,0.3)]' 
+                    : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
+                }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className="text-xs font-mono truncate max-w-[100px]" title={item.source}>{item.source}</span>
                   </div>
-                  <span className="text-xs text-slate-500">&rarr;</span>
+                  <span className="text-xs text-gray-500">&rarr;</span>
                   <span className="text-xs font-mono truncate max-w-[100px]" title={item.target}>{item.target}</span>
                 </div>
                 
                 <div className="grid grid-cols-2 gap-1 mb-2">
                   {item.service && (
-                    <div className="text-[10px] text-slate-500 truncate" title={item.service}>
+                    <div className="text-[10px] text-gray-500 truncate" title={item.service}>
                       <span className="font-semibold">Svc:</span> {item.service}
                     </div>
                   )}
                   {item.country && (
-                    <div className="text-[10px] text-slate-500 truncate" title={item.country}>
+                    <div className="text-[10px] text-gray-500 truncate" title={item.country}>
                       <span className="font-semibold">Loc:</span> {item.country}
                     </div>
                   )}
                   {item.aliasHost && (
-                    <div className="text-[10px] text-slate-500 truncate col-span-2" title={item.aliasHost}>
+                    <div className="text-[10px] text-gray-500 truncate col-span-2" title={item.aliasHost}>
                       <span className="font-semibold">Host:</span> {item.aliasHost}
                     </div>
                   )}
                 </div>
 
-                <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 text-right">
+                <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 text-right">
                   {formatBytes(item.size)}
                 </div>
               </div>
-            ))}
+            )})}
             {liveFeed.length === 0 && (
-              <div className="text-sm text-slate-500 text-center py-8">No active connections</div>
+              <div className="text-sm text-gray-500 text-center py-8">No active connections</div>
             )}
           </div>
         </div>

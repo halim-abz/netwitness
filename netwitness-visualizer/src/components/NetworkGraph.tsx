@@ -45,7 +45,7 @@ const CATEGORY_COLORS = [
   "#10b981", // emerald
   "#8b5cf6", // violet
   "#ec4899", // pink
-  "#6366f1", // indigo
+  "#BE3B37", // NetWitness Red
   "#006400", // Dark Green
   "#8b008b", // Dark Magenta
   "#4682b4", // Steel Blue
@@ -264,7 +264,7 @@ const CATEGORY_COLORS = [
       } else {
         el.append("circle")
           .attr("r", 15)
-          .attr("fill", d.networkType === "public" ? "#ef4444" : (d.networkType === "internal" ? (isDark ? "#0ea5e9" : "#3b82f6") : "#64748b"))
+          .attr("fill", d.networkType === "public" ? "#BE3B37" : (d.networkType === "internal" ? (isDark ? "#0ea5e9" : "#3b82f6") : "#64748b"))
           .attr("stroke", isDark ? "#0f172a" : "#ffffff")
           .attr("stroke-width", 2);
       }
@@ -412,17 +412,17 @@ const CATEGORY_COLORS = [
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-slate-50 dark:bg-slate-950 rounded-xl overflow-hidden shadow-inner relative border border-slate-200 dark:border-slate-800 transition-colors duration-200"
+      className="w-full h-full bg-gray-50 dark:bg-gray-950 rounded-xl overflow-hidden shadow-inner relative border border-gray-200 dark:border-gray-800 transition-colors duration-200"
     >
       <svg ref={svgRef} className="w-full h-full" />
       
-      <div className="absolute bottom-4 left-4 z-10 bg-white/95 dark:bg-slate-900/90 backdrop-blur p-3 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 max-w-[800px]">
+      <div className="absolute bottom-4 left-4 z-10 bg-white/95 dark:bg-gray-900/90 backdrop-blur p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-w-[800px]">
         <div 
           className="flex items-center justify-between cursor-pointer"
           onClick={() => setIsLegendOpen(!isLegendOpen)}
         >
-          <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-400 uppercase tracking-wider pr-4">Legend & Display</h4>
-          {isLegendOpen ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronUp size={14} className="text-slate-500" />}
+          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-400 uppercase tracking-wider pr-4">Legend & Display</h4>
+          {isLegendOpen ? <ChevronDown size={14} className="text-gray-500" /> : <ChevronUp size={14} className="text-gray-500" />}
         </div>
         
         {isLegendOpen && (
@@ -431,12 +431,12 @@ const CATEGORY_COLORS = [
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between group">
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-blue-500 dark:bg-sky-500 border-2 border-white dark:border-slate-950 shadow-sm shrink-0"></div>
-                    <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">Internal IP</span>
+                    <div className="w-4 h-4 rounded-full bg-blue-500 dark:bg-sky-500 border-2 border-white dark:border-gray-950 shadow-sm shrink-0"></div>
+                    <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">Internal IP</span>
                   </div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); setExpandedFilters(prev => ({...prev, 'Internal IP': !prev['Internal IP']})) }}
-                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Filter size={10} />
                   </button>
@@ -447,7 +447,7 @@ const CATEGORY_COLORS = [
                     placeholder={`Filter Internal IP...`}
                     value={attributeFilters['Internal IP'] || ''}
                     onChange={(e) => setAttributeFilters(prev => ({ ...prev, 'Internal IP': e.target.value }))}
-                    className="px-2 py-1 text-[10px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 w-full"
+                    className="px-2 py-1 text-[10px] bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-700 dark:text-gray-300 focus:outline-none focus:border-[#BE3B37] w-full"
                     onClick={(e) => e.stopPropagation()}
                   />
                 )}
@@ -456,12 +456,12 @@ const CATEGORY_COLORS = [
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between group">
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-red-500 border-2 border-white dark:border-slate-950 shadow-sm shrink-0"></div>
-                    <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">Public IP</span>
+                    <div className="w-4 h-4 rounded-full bg-[#BE3B37] border-2 border-white dark:border-gray-950 shadow-sm shrink-0"></div>
+                    <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">Public IP</span>
                   </div>
                   <button 
                     onClick={(e) => { e.stopPropagation(); setExpandedFilters(prev => ({...prev, 'Public IP': !prev['Public IP']})) }}
-                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <Filter size={10} />
                   </button>
@@ -472,7 +472,7 @@ const CATEGORY_COLORS = [
                     placeholder={`Filter Public IP...`}
                     value={attributeFilters['Public IP'] || ''}
                     onChange={(e) => setAttributeFilters(prev => ({ ...prev, 'Public IP': e.target.value }))}
-                    className="px-2 py-1 text-[10px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 w-full"
+                    className="px-2 py-1 text-[10px] bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-700 dark:text-gray-300 focus:outline-none focus:border-[#BE3B37] w-full"
                     onClick={(e) => e.stopPropagation()}
                   />
                 )}
@@ -480,8 +480,8 @@ const CATEGORY_COLORS = [
             </div>
             
             {availableAttributes.length > 0 && (
-              <div className="pt-2 mt-2 border-t border-slate-200 dark:border-slate-700">
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 mb-2">Click to toggle attributes, click filter icon to search</div>
+              <div className="pt-2 mt-2 border-t border-gray-200 dark:border-gray-700">
+                <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-2">Click to toggle attributes, click filter icon to search</div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-2 max-h-60 overflow-y-auto pr-1">
                   {availableAttributes.map(attr => {
                     const isActive = displayedAttributes.includes(attr);
@@ -492,13 +492,13 @@ const CATEGORY_COLORS = [
                             className={`flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-80 ${isActive ? 'opacity-100' : 'opacity-40'}`}
                             onClick={() => onToggleAttribute(attr)}
                           >
-                            <div className="w-3 h-3 rounded-sm border border-white dark:border-slate-950 shadow-sm shrink-0" style={{ backgroundColor: isActive ? getColor(attr) : '#94a3b8' }}></div>
-                            <span className={`text-xs font-medium truncate ${isActive ? 'text-slate-800 dark:text-slate-300' : 'text-slate-500 dark:text-slate-500'}`}>{attr}</span>
+                            <div className="w-3 h-3 rounded-sm border border-white dark:border-gray-950 shadow-sm shrink-0" style={{ backgroundColor: isActive ? getColor(attr) : '#94a3b8' }}></div>
+                            <span className={`text-xs font-medium truncate ${isActive ? 'text-gray-800 dark:text-gray-300' : 'text-gray-500 dark:text-gray-500'}`}>{attr}</span>
                           </div>
                           {isActive && (
                             <button 
                               onClick={(e) => { e.stopPropagation(); setExpandedFilters(prev => ({...prev, [attr]: !prev[attr]})) }}
-                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 opacity-0 group-hover:opacity-100 transition-opacity"
                             >
                               <Filter size={10} />
                             </button>
@@ -510,7 +510,7 @@ const CATEGORY_COLORS = [
                             placeholder={`Filter ${attr}...`}
                             value={attributeFilters[attr] || ''}
                             onChange={(e) => setAttributeFilters(prev => ({ ...prev, [attr]: e.target.value }))}
-                            className="px-2 py-1 text-[10px] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-slate-700 dark:text-slate-300 focus:outline-none focus:border-indigo-500 w-full"
+                            className="px-2 py-1 text-[10px] bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-700 dark:text-gray-300 focus:outline-none focus:border-[#BE3B37] w-full"
                             onClick={(e) => e.stopPropagation()}
                           />
                         )}
@@ -525,7 +525,7 @@ const CATEGORY_COLORS = [
       </div>
 
       {data.nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center text-slate-400 dark:text-slate-500 pointer-events-none">
+        <div className="absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500 pointer-events-none">
           No data to display. Run a query to see the network graph.
         </div>
       )}
