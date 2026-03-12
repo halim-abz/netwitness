@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import { GraphData, Node, Link } from "../types";
-import { ChevronDown, ChevronUp, Filter } from "lucide-react";
+import { ChevronDown, ChevronUp, Filter, Network, Activity } from "lucide-react";
+import { formatBytes } from "../lib/utils";
 
 interface NetworkGraphProps {
   data: GraphData;
@@ -29,6 +30,31 @@ export default function NetworkGraph({
   const [isLegendOpen, setIsLegendOpen] = useState(true);
   const [attributeFilters, setAttributeFilters] = useState<Record<string, string>>({});
   const [expandedFilters, setExpandedFilters] = useState<Record<string, boolean>>({});
+  const [hoveredItem, setHoveredItem] = useState<Node | Link | null>(null);
+  const [lastHoveredItem, setLastHoveredItem] = useState<Node | Link | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const mousePosRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      mousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+
+    container.addEventListener('mousemove', handleMouseMove);
+    return () => container.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  useEffect(() => {
+    if (hoveredItem) {
+      setLastHoveredItem(hoveredItem);
+      if (tooltipRef.current) {
+        tooltipRef.current.style.transform = `translate(${mousePosRef.current.x + 15}px, ${mousePosRef.current.y + 15}px)`;
+      }
+    }
+  }, [hoveredItem]);
 
 const CATEGORY_COLORS = [
   "#3cb44b", // Green
@@ -97,13 +123,22 @@ const CATEGORY_COLORS = [
 
     // Filter nodes based on attributeFilters
     const filteredNodes = data.nodes.filter(node => {
+      const checkFilter = (value: string, filterText: string) => {
+        if (!filterText) return true;
+        const isExclude = filterText.startsWith('!');
+        const textToMatch = isExclude ? filterText.slice(1).toLowerCase() : filterText.toLowerCase();
+        if (!textToMatch) return true;
+        const includes = value.toLowerCase().includes(textToMatch);
+        return isExclude ? !includes : includes;
+      };
+
       if (attributeFilters['Internal IP']) {
-        if (node.networkType === 'internal' && !node.id.toLowerCase().includes(attributeFilters['Internal IP'].toLowerCase())) {
+        if (node.networkType === 'internal' && !checkFilter(node.id, attributeFilters['Internal IP'])) {
           return false;
         }
       }
       if (attributeFilters['Public IP']) {
-        if (node.networkType === 'public' && !node.id.toLowerCase().includes(attributeFilters['Public IP'].toLowerCase())) {
+        if (node.networkType === 'public' && !checkFilter(node.id, attributeFilters['Public IP'])) {
           return false;
         }
       }
@@ -111,16 +146,26 @@ const CATEGORY_COLORS = [
       for (const [attr, filterText] of Object.entries(attributeFilters)) {
         if (attr === 'Internal IP' || attr === 'Public IP') continue;
         if (!filterText || !displayedAttributes.includes(attr)) continue;
+        
+        const isExclude = filterText.startsWith('!');
+        const textToMatch = isExclude ? filterText.slice(1).toLowerCase() : filterText.toLowerCase();
+        if (!textToMatch) continue;
+
         const keysToCheck = attr === 'country' ? ['country', 'country.src', 'country.dst'] : attr === 'org' ? ['org', 'org.src', 'org.dst'] : [attr];
         let matches = false;
         keysToCheck.forEach(key => {
           if (node.attributes && node.attributes[key]) {
-            if (node.attributes[key].some(val => String(val).toLowerCase().includes(String(filterText).toLowerCase()))) {
+            if (node.attributes[key].some(val => String(val).toLowerCase().includes(textToMatch))) {
               matches = true;
             }
           }
         });
-        if (!matches) return false;
+        
+        if (isExclude) {
+          if (matches) return false;
+        } else {
+          if (!matches) return false;
+        }
       }
       return true;
     });
@@ -132,14 +177,29 @@ const CATEGORY_COLORS = [
       return filteredNodeIds.has(sId) && filteredNodeIds.has(tId);
     });
 
+    const hasIpFilters = (attributeFilters['Internal IP']?.trim() || attributeFilters['Public IP']?.trim());
+    const connectedNodeIds = new Set<string>();
+    if (hasIpFilters) {
+      filteredLinks.forEach(l => {
+        const sId = typeof l.source === 'object' ? l.source.id : l.source;
+        const tId = typeof l.target === 'object' ? l.target.id : l.target;
+        connectedNodeIds.add(sId);
+        connectedNodeIds.add(tId);
+      });
+    }
+
+    const finalFilteredNodes = hasIpFilters 
+      ? filteredNodes.filter(n => connectedNodeIds.has(n.id))
+      : filteredNodes;
+
     // Create a copy of the data for d3 to mutate, and augment with attribute nodes
-    const augmentedNodes: Node[] = filteredNodes.map((d) => ({ ...d }));
+    const augmentedNodes: Node[] = finalFilteredNodes.map((d) => ({ ...d }));
     const augmentedLinks: Link[] = filteredLinks.map((d) => ({ ...d, type: "traffic" }));
 
     // Map to keep track of created attribute nodes to avoid duplicates
     const attributeNodesMap = new Map<string, Node>();
 
-    filteredNodes.forEach((node) => {
+    finalFilteredNodes.forEach((node) => {
       displayedAttributes.forEach((attr) => {
         if (attr === 'service') return; // Don't create attribute nodes for service
         const keysToCheck = attr === 'country' ? ['country', 'country.src', 'country.dst'] : attr === 'org' ? ['org', 'org.src', 'org.dst'] : [attr];
@@ -185,6 +245,15 @@ const CATEGORY_COLORS = [
       .force("charge", d3.forceManyBody().strength((d: any) => (d.type === "attribute" ? -300 : -800)))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius((d: any) => (d.type === "attribute" ? 40 : 60)));
+
+    // Fast-forward simulation for large graphs to prevent janky animations
+    if (augmentedNodes.length > 50) {
+      simulation.stop();
+      const ticks = Math.min(300, Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay())));
+      for (let i = 0; i < ticks; ++i) {
+        simulation.tick();
+      }
+    }
 
     // Draw links
     const link = g
@@ -253,59 +322,65 @@ const CATEGORY_COLORS = [
       const el = d3.select(this);
       if (d.type === "attribute") {
         el.append("rect")
-          .attr("width", 16)
-          .attr("height", 16)
-          .attr("x", -8)
-          .attr("y", -8)
+          .attr("width", 20)
+          .attr("height", 20)
+          .attr("x", -10)
+          .attr("y", -10)
           .attr("rx", 4)
+          .attr("transform", "rotate(45)")
           .attr("fill", getColor(d.attrType || "default"))
           .attr("stroke", isDark ? "#0f172a" : "#ffffff")
-          .attr("stroke-width", 2);
+          .attr("stroke-width", 2)
+          .style("filter", `drop-shadow(0 0 6px ${getColor(d.attrType || "default")}80)`);
       } else {
+        const color = d.networkType === "public" ? "#BE3B37" : (d.networkType === "internal" ? (isDark ? "#0ea5e9" : "#3b82f6") : "#64748b");
         el.append("circle")
           .attr("r", 15)
-          .attr("fill", d.networkType === "public" ? "#BE3B37" : (d.networkType === "internal" ? (isDark ? "#0ea5e9" : "#3b82f6") : "#64748b"))
+          .attr("fill", color)
           .attr("stroke", isDark ? "#0f172a" : "#ffffff")
-          .attr("stroke-width", 2);
+          .attr("stroke-width", 2)
+          .style("filter", `drop-shadow(0 0 8px ${color}80)`);
+          
+        // Inner highlight
+        el.append("circle")
+          .attr("r", 13)
+          .attr("fill", "none")
+          .attr("stroke", "rgba(255,255,255,0.2)")
+          .attr("stroke-width", 1);
       }
     });
 
     node
       .append("text")
-      .text((d) => (d.type === "attribute" ? d.attrValue : d.id))
-      .attr("x", (d) => (d.type === "attribute" ? 12 : 20))
-      .attr("y", (d) => (d.type === "attribute" ? 3 : 5))
+      .text((d) => (d.type === "attribute" ? d.attrValue || "" : d.id))
+      .attr("x", (d) => (d.type === "attribute" ? 16 : 22))
+      .attr("y", (d) => (d.type === "attribute" ? 4 : 5))
       .attr("font-size", (d) => (d.type === "attribute" ? "10px" : "12px"))
       .attr("font-weight", (d) => (d.type === "attribute" ? "normal" : "600"))
       .attr("font-family", "monospace")
-      .attr("fill", (d) => (d.type === "attribute" ? (isDark ? "#94a3b8" : "#64748b") : (isDark ? "#e2e8f0" : "#334155")));
+      .attr("fill", (d) => (d.type === "attribute" ? (isDark ? "#94a3b8" : "#64748b") : (isDark ? "#e2e8f0" : "#334155")))
+      .attr("paint-order", "stroke")
+      .attr("stroke", isDark ? "#0f172a" : "#ffffff")
+      .attr("stroke-width", 3)
+      .attr("stroke-linecap", "round")
+      .attr("stroke-linejoin", "round");
 
-    // Add title for hover
-    node.append("title").text((d) => {
-      if (d.type === "attribute") {
-        return `${d.attrType}: ${d.attrValue}`;
-      }
-      let title = d.id;
-      if (d.attributes) {
-        Object.entries(d.attributes).forEach(([key, values]) => {
-          if (values.length > 0) {
-            title += `\n${key}: ${values.join(", ")}`;
-          }
-        });
-      }
-      return title;
+    // Add hover handlers
+    node.on("mouseenter", (event, d) => {
+      setHoveredItem(d as unknown as Node);
+    })
+    .on("mouseleave", () => {
+      setHoveredItem(null);
     });
 
-    link
-      .append("title")
-      .text((d) => {
-        if (d.type === "attribute") {
-          return `Attribute Link`;
-        }
-        return `${(d.source as any).id} -> ${(d.target as any).id}\nSessions: ${d.count}\nSize: ${d.size}`;
-      });
+    link.on("mouseenter", (event, d) => {
+      setHoveredItem(d as unknown as Link);
+    })
+    .on("mouseleave", () => {
+      setHoveredItem(null);
+    });
 
-    simulation.on("tick", () => {
+    const updatePositions = () => {
       link
         .attr("x1", (d: any) => d.source.x)
         .attr("y1", (d: any) => d.source.y)
@@ -317,7 +392,13 @@ const CATEGORY_COLORS = [
         .attr("y", (d: any) => (d.source.y + d.target.y) / 2);
 
       node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
-    });
+    };
+
+    if (augmentedNodes.length > 50) {
+      updatePositions();
+    }
+
+    simulation.on("tick", updatePositions);
 
     function dragstarted(event: any, d: any) {
       if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -362,6 +443,7 @@ const CATEGORY_COLORS = [
 
     if (!selectedItem) {
       nodes.style("opacity", 1).style("transition", "opacity 0.3s");
+      nodes.selectAll("circle:first-child, rect").attr("stroke", isDark ? "#0f172a" : "#ffffff").attr("stroke-width", 2);
       links.style("opacity", (d: any) => d.type === "attribute" ? 0.6 : 0.8).style("transition", "opacity 0.3s");
       linkLabels.style("opacity", 1).style("transition", "opacity 0.3s");
       return;
@@ -373,6 +455,13 @@ const CATEGORY_COLORS = [
       const targetId = typeof selectedItem.target === "object" ? (selectedItem.target as any).id : selectedItem.target;
       
       nodes.style("opacity", (d: any) => (d.id === sourceId || d.id === targetId ? 1 : 0.1)).style("transition", "opacity 0.3s");
+      nodes.selectAll("circle:first-child, rect").attr("stroke", (d: any) => {
+        if (d.id === sourceId || d.id === targetId) return "#f59e0b"; // amber
+        return isDark ? "#0f172a" : "#ffffff";
+      }).attr("stroke-width", (d: any) => {
+        if (d.id === sourceId || d.id === targetId) return 3;
+        return 2;
+      });
       links.style("opacity", (d: any) => {
         const sId = typeof d.source === "object" ? d.source.id : d.source;
         const tId = typeof d.target === "object" ? d.target.id : d.target;
@@ -396,6 +485,13 @@ const CATEGORY_COLORS = [
       });
 
       nodes.style("opacity", (d: any) => (connectedIds.has(d.id) ? 1 : 0.1)).style("transition", "opacity 0.3s");
+      nodes.selectAll("circle:first-child, rect").attr("stroke", (d: any) => {
+        if (d.id === selectedItem.id) return "#f59e0b"; // amber
+        return isDark ? "#0f172a" : "#ffffff";
+      }).attr("stroke-width", (d: any) => {
+        if (d.id === selectedItem.id) return 3;
+        return 2;
+      });
       links.style("opacity", (d: any) => {
         const sId = typeof d.source === "object" ? d.source.id : d.source;
         const tId = typeof d.target === "object" ? d.target.id : d.target;
@@ -412,16 +508,32 @@ const CATEGORY_COLORS = [
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-gray-50 dark:bg-gray-950 rounded-xl overflow-hidden shadow-inner relative border border-gray-200 dark:border-gray-800 transition-colors duration-200"
+      className="w-full h-full bg-gray-50 dark:bg-gray-950 rounded-xl overflow-hidden shadow-inner relative border border-gray-200 dark:border-gray-800 transition-colors duration-200 bg-grid-pattern animate-grid"
     >
       <svg ref={svgRef} className="w-full h-full" />
       
-      <div className="absolute bottom-4 left-4 z-10 bg-white/95 dark:bg-gray-900/90 backdrop-blur p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-w-[800px]">
+      {/* Top Right Stats Bar */}
+      <div className="absolute top-4 right-4 z-10 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md px-4 py-2 rounded-lg shadow-md border border-gray-200 dark:border-gray-800 flex items-center gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="flex items-center gap-2">
+          <Network size={16} className="text-gray-500 dark:text-gray-400" />
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{data.nodes.length} Nodes</span>
+        </div>
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-700"></div>
+        <div className="flex items-center gap-2">
+          <Activity size={16} className="text-gray-500 dark:text-gray-400" />
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">{data.links.length} Links</span>
+        </div>
+      </div>
+
+      <div className="absolute bottom-4 left-4 z-10 bg-white/95 dark:bg-gray-900/90 backdrop-blur p-3 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 max-w-[800px] animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div 
           className="flex items-center justify-between cursor-pointer"
           onClick={() => setIsLegendOpen(!isLegendOpen)}
         >
-          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-400 uppercase tracking-wider pr-4">Legend & Display</h4>
+          <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-400 uppercase tracking-wider pr-4 flex items-center gap-2">
+            <Activity size={14} className="text-[#BE3B37]" />
+            Legend & Display
+          </h4>
           {isLegendOpen ? <ChevronDown size={14} className="text-gray-500" /> : <ChevronUp size={14} className="text-gray-500" />}
         </div>
         
@@ -525,10 +637,117 @@ const CATEGORY_COLORS = [
       </div>
 
       {data.nodes.length === 0 && (
-        <div className="absolute inset-0 flex items-center justify-center text-gray-400 dark:text-gray-500 pointer-events-none">
-          No data to display. Run a query to see the network graph.
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 pointer-events-none animate-in fade-in duration-700">
+          <Network size={48} className="mb-4 opacity-50" />
+          <h3 className="text-lg font-semibold mb-1 text-gray-600 dark:text-gray-300">No Network Data</h3>
+          <p className="text-sm">Run a query to visualize network connections.</p>
         </div>
       )}
+
+      {/* Hover Tooltip */}
+      <div 
+        ref={tooltipRef}
+        className={`fixed left-0 top-0 z-50 pointer-events-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-lg p-3 text-sm transition-opacity duration-200 ${hoveredItem ? 'opacity-100' : 'opacity-0'}`}
+        style={{ 
+          maxWidth: '300px',
+          willChange: 'transform, opacity'
+        }}
+      >
+        {lastHoveredItem && (
+          ('source' in lastHoveredItem) ? (
+            // Link Tooltip
+            <div className="space-y-2">
+              <div className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-1 mb-1">
+                Connection Details
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500 dark:text-gray-400">Source:</span>
+                <span className="font-mono text-right truncate">{(lastHoveredItem.source as any).id || lastHoveredItem.source}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500 dark:text-gray-400">Target:</span>
+                <span className="font-mono text-right truncate">{(lastHoveredItem.target as any).id || lastHoveredItem.target}</span>
+              </div>
+              {lastHoveredItem.type !== 'attribute' && (
+                <>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gray-500 dark:text-gray-400">Sessions:</span>
+                    <span className="font-semibold">{lastHoveredItem.count}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gray-500 dark:text-gray-400">Size:</span>
+                    <span className="font-semibold">{formatBytes(lastHoveredItem.size || 0)}</span>
+                  </div>
+                  {(lastHoveredItem as Link).services && (lastHoveredItem as Link).services!.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                      <span className="text-gray-500 dark:text-gray-400 block mb-1">Services:</span>
+                      <div className="flex flex-wrap gap-1">
+                        {(lastHoveredItem as Link).services!.map((s: string) => (
+                          <span key={s} className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-[10px] uppercase tracking-wider">{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            // Node Tooltip
+            <div className="space-y-2">
+              <div className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-1 mb-1 flex items-center gap-2">
+                {lastHoveredItem.type === 'attribute' ? (
+                  <div className="w-2 h-2 rounded-sm transform rotate-45" style={{ backgroundColor: getColor(lastHoveredItem.attrType || '') }}></div>
+                ) : (
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: lastHoveredItem.networkType === 'public' ? '#BE3B37' : (lastHoveredItem.networkType === 'internal' ? (isDark ? '#0ea5e9' : '#3b82f6') : '#64748b') }}></div>
+                )}
+                <span className="font-mono truncate">{lastHoveredItem.type === 'attribute' ? lastHoveredItem.attrValue : lastHoveredItem.id}</span>
+              </div>
+              
+              {lastHoveredItem.type === 'attribute' ? (
+                <div className="flex justify-between gap-4">
+                  <span className="text-gray-500 dark:text-gray-400">Type:</span>
+                  <span className="font-semibold capitalize">{lastHoveredItem.attrType}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gray-500 dark:text-gray-400">Network:</span>
+                    <span className="font-semibold capitalize">{lastHoveredItem.networkType}</span>
+                  </div>
+                  {lastHoveredItem.country && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-gray-500 dark:text-gray-400">Country:</span>
+                      <span className="font-semibold">{lastHoveredItem.country}</span>
+                    </div>
+                  )}
+                  {lastHoveredItem.org && (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-gray-500 dark:text-gray-400">Org:</span>
+                      <span className="font-semibold truncate max-w-[150px]">{lastHoveredItem.org}</span>
+                    </div>
+                  )}
+                  {lastHoveredItem.attributes && Object.keys(lastHoveredItem.attributes).length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                      <span className="text-gray-500 dark:text-gray-400 block mb-1">Attributes:</span>
+                      <div className="space-y-1">
+                        {Object.entries(lastHoveredItem.attributes).slice(0, 5).map(([k, v]) => (
+                          <div key={k} className="flex justify-between gap-2 text-[10px]">
+                            <span className="text-gray-500">{k}:</span>
+                            <span className="truncate max-w-[150px]">{v.join(', ')}</span>
+                          </div>
+                        ))}
+                        {Object.keys(lastHoveredItem.attributes).length > 5 && (
+                          <div className="text-[10px] text-gray-400 italic">+{Object.keys(lastHoveredItem.attributes).length - 5} more</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )
+        )}
+      </div>
     </div>
   );
 }

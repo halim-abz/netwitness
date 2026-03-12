@@ -1,5 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
-import axios from "axios";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import Sidebar, { QueryConfig } from "./components/Sidebar";
 import NetworkGraph from "./components/NetworkGraph";
 import GlobeView from "./components/GlobeView";
@@ -21,12 +20,34 @@ export default function App() {
   const [isDark, setIsDark] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [viewMode, setViewMode] = useState<'graph' | 'globe'>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('view') === 'globe') return 'globe';
-    }
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('view') === 'globe') return 'globe';
+      }
+    } catch (e) {}
     return 'graph';
   });
+  
+  const [homeLocation, setHomeLocation] = useState<{lat: number, lng: number} | null>(() => {
+    try {
+      const stored = localStorage.getItem('nw_home_location');
+      if (stored) return JSON.parse(stored);
+      
+      const envLat = import.meta.env.VITE_NW_HOME_LAT;
+      const envLng = import.meta.env.VITE_NW_HOME_LNG;
+      if (envLat && envLng) {
+        return { lat: parseFloat(envLat), lng: parseFloat(envLng) };
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [navigateUrl, setNavigateUrl] = useState<string>(() => {
+    return localStorage.getItem('nw_navigate_url') || import.meta.env.VITE_NW_NAVIGATE_URL;
+  });
+
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -37,15 +58,15 @@ export default function App() {
     }
   }, [isDark]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const handleQuery = async (config: QueryConfig) => {
+  const handleQuery = useCallback(async (config: QueryConfig) => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -57,77 +78,94 @@ export default function App() {
     setDisplayedAttributes(['service']); // Reset displayed attributes on new query
 
     const optionalKeys = config.metakeys.filter(
-      (k) => !["ip.src", "ip.dst", "size", "latdec.src", "latdec.dst", "longdec.src", "longdec.dst", "direction"].includes(k)
+      (k) => !["ip.src", "ip.dst", "size", "latdec.src", "latdec.dst", "longdec.src", "longdec.dst", "direction", "time"].includes(k)
     );
     setQueriedAttributes(optionalKeys);
+    if (config.navigateUrl) {
+      setNavigateUrl(config.navigateUrl);
+    }
 
     try {
       const queryKeys = Array.from(new Set([
         ...config.metakeys.flatMap(k => k === 'country' ? ['country.src', 'country.dst'] : k === 'org' ? ['org.src', 'org.dst'] : [k]),
-        'latdec.src', 'latdec.dst', 'longdec.src', 'longdec.dst'
+        'latdec.src', 'latdec.dst', 'longdec.src', 'longdec.dst', 'time'
       ]));
       const selectClause = queryKeys.join(",");
       let fullQuery = `select ${selectClause} where ${config.query}`;
       if (config.timeRange !== "all") {
         fullQuery += ` && time=rtp(latest,${config.timeRange})-u`;
       }
-      fullQuery += "";
 
-      const response = await axios.post<NetWitnessResponse>("/api/query", {
-        host: config.host,
-        port: config.port,
-        query: fullQuery,
-        size: config.size,
-        username: config.username,
-        password: config.password,
-      }, {
+      const response = await fetch("/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: config.host,
+          port: config.port,
+          query: fullQuery,
+          size: config.size,
+          username: config.username,
+          password: config.password,
+        }),
         signal: abortControllerRef.current.signal
       });
 
-      const processedData = processData(response.data);
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      const processedData = processData(data, config.homeLocation);
       setGraphData(processedData);
     } catch (err: any) {
-      if (axios.isCancel(err)) {
+      if (err.name === 'AbortError') {
         console.log("Query cancelled");
         return;
       }
       console.error("Query failed:", err);
-      setError(
-        err.response?.data?.error || err.message || "An unknown error occurred",
-      );
+      setError(err.message || "An unknown error occurred");
     } finally {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  };
+  }, []);
 
-  const processData = (data: NetWitnessResponse): GraphData => {
+  const processData = (data: NetWitnessResponse, homeLoc?: {lat: number, lng: number} | null): GraphData => {
     if (!data?.results?.fields) return { nodes: [], links: [] };
 
     const sessionsMap: Record<number, Session> = {};
+    const fields = data.results.fields;
+    const fieldsLen = fields.length;
 
     // Group fields by session (group ID)
-    data.results.fields.forEach((field) => {
-      if (!sessionsMap[field.group]) {
-        sessionsMap[field.group] = { group: field.group };
+    for (let i = 0; i < fieldsLen; i++) {
+      const field = fields[i];
+      const g = field.group;
+      if (!sessionsMap[g]) {
+        sessionsMap[g] = { group: g };
       }
       
-      const existing = sessionsMap[field.group][field.type];
-      if (existing) {
+      const existing = sessionsMap[g][field.type];
+      if (existing !== undefined) {
         if (Array.isArray(existing)) {
           if (!existing.includes(field.value)) existing.push(field.value);
         } else if (existing !== field.value) {
-          sessionsMap[field.group][field.type] = [existing, field.value];
+          sessionsMap[g][field.type] = [existing, field.value];
         }
       } else {
-        sessionsMap[field.group][field.type] = field.value;
+        sessionsMap[g][field.type] = field.value;
       }
-    });
+    }
 
     const nodesMap: Record<string, Node> = {};
     const linksMap: Record<string, Link> = {};
 
-    Object.values(sessionsMap).forEach((session) => {
+    const sessionsValues = Object.values(sessionsMap);
+    const sessionsLen = sessionsValues.length;
+
+    for (let i = 0; i < sessionsLen; i++) {
+      const session = sessionsValues[i];
       // Handle cases where ip.src or ip.dst might be arrays
       const srcs = Array.isArray(session["ip.src"]) ? session["ip.src"] : (session["ip.src"] ? [session["ip.src"]] : []);
       const dsts = Array.isArray(session["ip.dst"]) ? session["ip.dst"] : (session["ip.dst"] ? [session["ip.dst"]] : []);
@@ -139,80 +177,102 @@ export default function App() {
       const oDst = Array.isArray(session["org.dst"]) ? session["org.dst"][0] : session["org.dst"];
       const nn = Array.isArray(session["netname"]) ? session["netname"].join(", ") : session["netname"];
 
+      const sessionKeys = Object.keys(session);
+
       // Add nodes and collect attributes
       const addNodeAttributes = (id: string, isSrc: boolean) => {
-        if (!nodesMap[id]) {
-          nodesMap[id] = { id, type: "ip", attributes: {}, networkType: "unknown" };
+        let node = nodesMap[id];
+        if (!node) {
+          node = { id, type: "ip", attributes: {}, networkType: "unknown" };
+          nodesMap[id] = node;
         }
         
+        let networkType = 'unknown';
         if (dirStr) {
           const d = String(dirStr).toLowerCase();
           if (d === 'inbound') {
-            nodesMap[id].networkType = isSrc ? 'public' : 'internal';
+            networkType = isSrc ? 'public' : 'internal';
           } else if (d === 'outbound') {
-            nodesMap[id].networkType = isSrc ? 'internal' : 'public';
+            networkType = isSrc ? 'internal' : 'public';
           } else if (d === 'lateral') {
-            nodesMap[id].networkType = 'internal';
+            networkType = 'internal';
           }
+          node.networkType = networkType as any;
         }
 
         const country = isSrc ? cSrc : cDst;
         if (country) {
-          nodesMap[id].country = String(country);
+          node.country = String(country);
         }
         
         const org = isSrc ? oSrc : oDst;
         if (org) {
-          nodesMap[id].org = String(org);
+          node.org = String(org);
         }
         
         if (nn) {
-          if (!nodesMap[id].netname) nodesMap[id].netname = String(nn);
-          else if (!nodesMap[id].netname?.includes(String(nn))) nodesMap[id].netname += `, ${String(nn)}`;
+          if (!node.netname) node.netname = String(nn);
+          else if (!node.netname.includes(String(nn))) node.netname += `, ${String(nn)}`;
         }
         
-        const lat = isSrc ? session["latdec.src"] : session["latdec.dst"];
-        const lng = isSrc ? session["longdec.src"] : session["longdec.dst"];
-        if (lat) nodesMap[id].lat = parseFloat(Array.isArray(lat) ? lat[0] : lat);
-        if (lng) nodesMap[id].lng = parseFloat(Array.isArray(lng) ? lng[0] : lng);
+        let lat = isSrc ? session["latdec.src"] : session["latdec.dst"];
+        let lng = isSrc ? session["longdec.src"] : session["longdec.dst"];
+        
+        if (lat) node.lat = parseFloat(Array.isArray(lat) ? lat[0] : lat);
+        if (lng) node.lng = parseFloat(Array.isArray(lng) ? lng[0] : lng);
+
+        // Apply home location if missing and it's an internal IP in inbound/outbound
+        if (homeLoc && networkType === 'internal' && String(dirStr).toLowerCase() !== 'lateral') {
+          if (node.lat === undefined) node.lat = homeLoc.lat;
+          if (node.lng === undefined) node.lng = homeLoc.lng;
+        }
 
         // Add all session attributes to this node
-        Object.entries(session).forEach(([key, value]) => {
-          if (["group", "ip.src", "ip.dst", "size", "direction", "latdec.src", "latdec.dst", "longdec.src", "longdec.dst"].includes(key)) return;
+        for (let k = 0; k < sessionKeys.length; k++) {
+          const key = sessionKeys[k];
+          if (key === "group" || key === "ip.src" || key === "ip.dst" || key === "size" || key === "direction" || key === "latdec.src" || key === "latdec.dst" || key === "longdec.src" || key === "longdec.dst" || key === "time") continue;
           
-          if ((key.endsWith('.src') || key.endsWith('.srcport')) && !isSrc) return;
-          if ((key.endsWith('.dst') || key.endsWith('.dstport')) && isSrc) return;
+          if ((key.endsWith('.src') || key.endsWith('.srcport')) && !isSrc) continue;
+          if ((key.endsWith('.dst') || key.endsWith('.dstport')) && isSrc) continue;
           
-          if (["ssl.ca", "ssl.subject", "server"].includes(key) && isSrc) return;
-          if (key === "client" && !isSrc) return;
+          if ((key === "ssl.ca" || key === "ssl.subject" || key === "server") && isSrc) continue;
+          if (key === "client" && !isSrc) continue;
           
-          if (!nodesMap[id].attributes![key]) {
-            nodesMap[id].attributes![key] = [];
+          if (!node.attributes![key]) {
+            node.attributes![key] = [];
           }
           
+          const value = session[key];
           const valuesToAdd = Array.isArray(value) ? value : [value];
-          valuesToAdd.forEach(v => {
-            const strVal = String(v);
+          for (let vIdx = 0; vIdx < valuesToAdd.length; vIdx++) {
+            const strVal = String(valuesToAdd[vIdx]);
             if (key === 'netname') {
-              if (strVal.endsWith(' src') && !isSrc) return;
-              if (strVal.endsWith(' dst') && isSrc) return;
+              if (strVal.endsWith(' src') && !isSrc) continue;
+              if (strVal.endsWith(' dst') && isSrc) continue;
             }
-            if (!nodesMap[id].attributes![key].includes(strVal)) {
-              nodesMap[id].attributes![key].push(strVal);
+            if (!node.attributes![key].includes(strVal)) {
+              node.attributes![key].push(strVal);
             }
-          });
-        });
+          }
+        }
       };
 
-      srcs.forEach(src => addNodeAttributes(src, true));
-      dsts.forEach(dst => addNodeAttributes(dst, false));
+      for (let sIdx = 0; sIdx < srcs.length; sIdx++) {
+        addNodeAttributes(srcs[sIdx], true);
+      }
+      for (let dIdx = 0; dIdx < dsts.length; dIdx++) {
+        addNodeAttributes(dsts[dIdx], false);
+      }
 
       // Create links for all src-dst pairs
-      srcs.forEach(src => {
-        dsts.forEach(dst => {
+      for (let sIdx = 0; sIdx < srcs.length; sIdx++) {
+        const src = srcs[sIdx];
+        for (let dIdx = 0; dIdx < dsts.length; dIdx++) {
+          const dst = dsts[dIdx];
           const linkId = `${src}-${dst}`;
-          if (!linksMap[linkId]) {
-            linksMap[linkId] = {
+          let link = linksMap[linkId];
+          if (!link) {
+            link = {
               source: src,
               target: dst,
               sessions: [],
@@ -220,28 +280,32 @@ export default function App() {
               count: 0,
               services: new Set<string>(),
             } as any;
+            linksMap[linkId] = link;
           }
 
-          linksMap[linkId].sessions.push(session);
-          linksMap[linkId].count += 1;
+          if (!link.sessions) link.sessions = [];
+          link.sessions.push(session);
+          link.count = (link.count || 0) + 1;
 
           const sizeVal = Array.isArray(session["size"]) ? session["size"][0] : session["size"];
           if (sizeVal) {
-            linksMap[linkId].size += parseInt(sizeVal, 10) || 0;
+            link.size = (link.size || 0) + (parseInt(sizeVal, 10) || 0);
           }
           
           const serviceVal = session["service"];
           if (serviceVal) {
             const servicesToAdd = Array.isArray(serviceVal) ? serviceVal : [serviceVal];
-            servicesToAdd.forEach(s => (linksMap[linkId] as any).services.add(String(s)));
+            for (let svcIdx = 0; svcIdx < servicesToAdd.length; svcIdx++) {
+              (link as any).services.add(String(servicesToAdd[svcIdx]));
+            }
           }
-        });
-      });
-    });
+        }
+      }
+    }
 
     const links = Object.values(linksMap).map(link => ({
       ...link,
-      services: Array.from((link as any).services || [])
+      services: Array.from((link as any).services || []) as string[]
     }));
 
     return {
@@ -250,14 +314,17 @@ export default function App() {
     };
   };
 
-  const handleAttributeSelect = (attrType: string, attrValue: string) => {
+  const handleAttributeSelect = useCallback((attrType: string, attrValue: string) => {
     let normalizedAttrType = attrType;
     if (attrType === 'country.src' || attrType === 'country.dst') normalizedAttrType = 'country';
     if (attrType === 'org.src' || attrType === 'org.dst') normalizedAttrType = 'org';
 
-    if (!displayedAttributes.includes(normalizedAttrType)) {
-      setDisplayedAttributes(prev => [...prev, normalizedAttrType]);
-    }
+    setDisplayedAttributes(prev => {
+      if (!prev.includes(normalizedAttrType)) {
+        return [...prev, normalizedAttrType];
+      }
+      return prev;
+    });
     
     setSelectedItem({
       id: `attr-${normalizedAttrType}-${attrValue}`,
@@ -265,7 +332,7 @@ export default function App() {
       attrType: normalizedAttrType,
       attrValue: attrValue,
     });
-  };
+  }, []);
 
   return (
     <div className={`flex h-screen w-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-300 font-sans overflow-hidden transition-colors duration-200 ${isDark ? 'dark' : ''}`}>
@@ -276,7 +343,14 @@ export default function App() {
             onClick={() => setIsSidebarOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 z-40 md:relative shadow-2xl md:shadow-none">
-            <Sidebar onQuery={handleQuery} isLoading={isLoading} onCancel={handleCancel} onClose={() => setIsSidebarOpen(false)} />
+            <Sidebar 
+              onQuery={handleQuery} 
+              isLoading={isLoading} 
+              onCancel={handleCancel} 
+              onClose={() => setIsSidebarOpen(false)} 
+              homeLocation={homeLocation}
+              onHomeLocationChange={setHomeLocation}
+            />
           </div>
         </>
       )}
@@ -309,13 +383,13 @@ export default function App() {
           >
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <div className="flex bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm overflow-hidden">
+          <div className="flex bg-gray-100 dark:bg-gray-800/80 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
             <button
               onClick={() => setViewMode('graph')}
-              className={`px-3 py-2 flex items-center gap-2 text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 flex items-center gap-2 text-sm font-medium transition-all rounded-md ${
                 viewMode === 'graph'
-                  ? 'bg-[#BE3B37]/10 dark:bg-blue-900/30 text-[#BE3B37] dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
               }`}
             >
               <Network size={16} />
@@ -323,10 +397,10 @@ export default function App() {
             </button>
             <button
               onClick={() => setViewMode('globe')}
-              className={`px-3 py-2 flex items-center gap-2 text-sm font-medium transition-colors ${
+              className={`px-3 py-1.5 flex items-center gap-2 text-sm font-medium transition-all rounded-md ${
                 viewMode === 'globe'
-                  ? 'bg-[#BE3B37]/10 dark:bg-blue-900/30 text-[#BE3B37] dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
               }`}
             >
               <Globe size={16} />
@@ -353,22 +427,24 @@ export default function App() {
 
         <div className="flex-1 relative rounded-xl border border-gray-200 dark:border-gray-800 shadow-lg bg-white dark:bg-gray-900 overflow-hidden transition-colors duration-200">
           {viewMode === 'graph' ? (
-            <NetworkGraph
-              data={graphData}
-              onNodeClick={setSelectedItem}
-              onLinkClick={setSelectedItem}
-              displayedAttributes={displayedAttributes}
-              availableAttributes={queriedAttributes}
-              onToggleAttribute={(attr) => {
-                setDisplayedAttributes((prev) =>
-                  prev.includes(attr)
-                    ? prev.filter((a) => a !== attr)
-                    : [...prev, attr]
-                );
-              }}
-              isDark={isDark}
-              selectedItem={selectedItem}
-            />
+            <div className="w-full h-full bg-grid-pattern animate-grid">
+              <NetworkGraph
+                data={graphData}
+                onNodeClick={setSelectedItem}
+                onLinkClick={setSelectedItem}
+                displayedAttributes={displayedAttributes}
+                availableAttributes={queriedAttributes}
+                onToggleAttribute={(attr) => {
+                  setDisplayedAttributes((prev) =>
+                    prev.includes(attr)
+                      ? prev.filter((a) => a !== attr)
+                      : [...prev, attr]
+                  );
+                }}
+                isDark={isDark}
+                selectedItem={selectedItem}
+              />
+            </div>
           ) : (
             <ErrorBoundary>
               <GlobeView
@@ -386,9 +462,11 @@ export default function App() {
             graphData={graphData}
             onNodeSelect={setSelectedItem}
             onAttributeSelect={handleAttributeSelect}
+            navigateUrl={navigateUrl}
           />
         </div>
       </main>
     </div>
   );
 }
+

@@ -1,6 +1,5 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import axios from "axios";
 import https from "https";
 
 async function startServer() {
@@ -25,17 +24,44 @@ async function startServer() {
         rejectUnauthorized: false,
       });
 
-      const axiosConfig: any = { httpsAgent };
-      
+      const headers: any = {};
       if (username && password) {
-        axiosConfig.auth = {
-          username,
-          password
-        };
+        headers['Authorization'] = 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
       }
 
-      const response = await axios.get(url, axiosConfig);
-      res.json(response.data);
+      // Use node-fetch style or native fetch if available. Since Node 18+ has native fetch,
+      // but native fetch doesn't support https.Agent directly. We can use the 'https' module directly.
+      
+      const requestOptions = {
+        method: 'GET',
+        headers,
+        agent: httpsAgent,
+      };
+
+      const makeRequest = () => new Promise((resolve, reject) => {
+        const req = https.request(url, requestOptions, (response) => {
+          let data = '';
+          response.on('data', (chunk) => {
+            data += chunk;
+          });
+          response.on('end', () => {
+            try {
+              if (response.statusCode && response.statusCode >= 400) {
+                reject(new Error(`HTTP Error ${response.statusCode}: ${data}`));
+              } else {
+                resolve(JSON.parse(data));
+              }
+            } catch (e) {
+              reject(e);
+            }
+          });
+        });
+        req.on('error', reject);
+        req.end();
+      });
+
+      const data = await makeRequest();
+      res.json(data);
     } catch (error: any) {
       console.error("Error querying NetWitness:", error.message);
       res.status(500).json({ 

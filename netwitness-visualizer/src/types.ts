@@ -49,6 +49,7 @@ export interface Link {
   size?: number;
   count?: number;
   type?: string;
+  services?: string[];
 }
 
 export interface GraphData {

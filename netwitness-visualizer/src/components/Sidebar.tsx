@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Play, Settings, Server, Filter } from "lucide-react";
+import { Play, Settings, Server, Filter, ChevronDown, ChevronRight, MapPin } from "lucide-react";
 
 const OPTIONAL_METAKEYS = [
   "service",
@@ -32,11 +32,24 @@ const OPTIONAL_METAKEYS = [
   "longdec.dst"
 ];
 
+const METAKEY_CATEGORIES: Record<string, string[]> = {
+  "Network": ["service", "tcp.dstport", "udp.dstport", "action"],
+  "Identity": ["client", "server", "user.all", "email.all", "domain", "alias.host"],
+  "Geo/Org": ["country", "org"],
+  "Threat Intel": ["ioc", "boc", "eoc"],
+  "Files": ["filename.all", "filetype"],
+  "Encryption": ["ssl.ca", "ssl.subject", "ja3", "ja3s", "ja4"],
+  "Hardware": ["eth.src", "eth.dst"],
+  "Location": ["latdec.src", "latdec.dst", "longdec.src", "longdec.dst"]
+};
+
 interface SidebarProps {
   onQuery: (config: QueryConfig) => void;
   isLoading: boolean;
   onCancel: () => void;
   onClose?: () => void;
+  homeLocation?: { lat: number; lng: number } | null;
+  onHomeLocationChange?: (loc: { lat: number; lng: number } | null) => void;
 }
 
 export interface QueryConfig {
@@ -48,20 +61,25 @@ export interface QueryConfig {
   username?: string;
   password?: string;
   timeRange: string;
+  homeLocation?: { lat: number; lng: number } | null;
+  navigateUrl?: string;
 }
 
 const TIME_RANGES = [
   { label: "Last 5 Minutes", value: "5m" },
+  { label: "Last 15 Minutes", value: "15m" },
   { label: "Last 30 Minutes", value: "30m" },
   { label: "Last 1 Hour", value: "1h" },
-  { label: "Last 5 Hours", value: "5h" },
+  { label: "Last 3 Hour", value: "3h" },
+  { label: "Last 6 Hours", value: "6h" },
+  { label: "Last 12 Hours", value: "12h" },
   { label: "Last 1 Day", value: "24h" },
   { label: "Last 3 Days", value: "72h" },
   { label: "Last 1 Week", value: "168h" },
   { label: "All Data", value: "all" },
 ];
 
-export default function Sidebar({ onQuery, isLoading, onCancel, onClose }: SidebarProps) {
+export default function Sidebar({ onQuery, isLoading, onCancel, onClose, homeLocation, onHomeLocationChange }: SidebarProps) {
   const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
   const initialQuery = params.get('query') || "ip.src exists";
   const initialSize = params.get('size') ? Number(params.get('size')) : 10000;
@@ -78,6 +96,28 @@ export default function Sidebar({ onQuery, isLoading, onCancel, onClose }: Sideb
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(
     new Set(OPTIONAL_METAKEYS),
   );
+  
+  const [isConnectionOpen, setIsConnectionOpen] = useState(true);
+  const [isQueryOpen, setIsQueryOpen] = useState(true);
+  const [isMetakeysOpen, setIsMetakeysOpen] = useState(true);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+  
+  const [homeLat, setHomeLat] = useState(homeLocation?.lat?.toString() || "");
+  const [homeLng, setHomeLng] = useState(homeLocation?.lng?.toString() || "");
+  const [navigateUrl, setNavigateUrl] = useState(() => localStorage.getItem('nw_navigate_url') || import.meta.env.VITE_NW_NAVIGATE_URL);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval, setRefreshInterval] = useState(5);
+
+  React.useEffect(() => {
+    if (homeLat && homeLng && !isNaN(parseFloat(homeLat)) && !isNaN(parseFloat(homeLng))) {
+      const loc = { lat: parseFloat(homeLat), lng: parseFloat(homeLng) };
+      localStorage.setItem('nw_home_location', JSON.stringify(loc));
+      if (onHomeLocationChange) onHomeLocationChange(loc);
+    } else if (!homeLat && !homeLng) {
+      localStorage.removeItem('nw_home_location');
+      if (onHomeLocationChange) onHomeLocationChange(null);
+    }
+  }, [homeLat, homeLng, onHomeLocationChange]);
 
   React.useEffect(() => {
     if (params.has('query')) {
@@ -94,11 +134,37 @@ export default function Sidebar({ onQuery, isLoading, onCancel, onClose }: Sideb
         username: username || import.meta.env.VITE_NW_USERNAME,
         password: password || import.meta.env.VITE_NW_PASSWORD,
         timeRange: initialTimeRange,
-        metakeys: ["ip.src", "ip.dst", "size", "netname", "direction", ...selectedKeys, ...customKeysArray],
+        homeLocation,
+        navigateUrl,
+        metakeys: ["ip.src", "ip.dst", "size", "netname", "direction", "time", ...Array.from(selectedKeys), ...customKeysArray],
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  React.useEffect(() => {
+    if (!autoRefresh || refreshInterval <= 0) return;
+    const intervalId = setInterval(() => {
+      const customKeysArray = customMetakeys
+        .split(",")
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+        
+      onQuery({
+        host: host || import.meta.env.VITE_NW_HOST,
+        port: port || import.meta.env.VITE_NW_PORT,
+        query,
+        size,
+        username: username || import.meta.env.VITE_NW_USERNAME,
+        password: password || import.meta.env.VITE_NW_PASSWORD,
+        timeRange,
+        homeLocation,
+        navigateUrl,
+        metakeys: ["ip.src", "ip.dst", "size", "netname", "direction", "time", ...Array.from(selectedKeys), ...customKeysArray],
+      });
+    }, refreshInterval * 60 * 1000);
+    return () => clearInterval(intervalId);
+  }, [autoRefresh, refreshInterval, host, port, query, size, username, password, timeRange, homeLocation, navigateUrl, selectedKeys, customMetakeys, onQuery]);
 
   const handleToggleKey = (key: string) => {
     const newKeys = new Set(selectedKeys);
@@ -110,6 +176,37 @@ export default function Sidebar({ onQuery, isLoading, onCancel, onClose }: Sideb
     setSelectedKeys(newKeys);
   };
 
+  const handleToggleCategory = (category: string) => {
+    const keys = METAKEY_CATEGORIES[category];
+    const newKeys = new Set(selectedKeys);
+    const allSelected = keys.every(k => newKeys.has(k));
+    
+    keys.forEach(k => {
+      if (allSelected) {
+        newKeys.delete(k);
+      } else {
+        newKeys.add(k);
+      }
+    });
+    
+    setSelectedKeys(newKeys);
+  };
+
+  const handleSelectAll = () => {
+    setSelectedKeys(new Set(OPTIONAL_METAKEYS));
+  };
+
+  const handleSelectNone = () => {
+    setSelectedKeys(new Set());
+  };
+
+  const toggleCategoryExpand = (category: string) => {
+    setExpandedCategories(prev => ({
+      ...prev,
+      [category]: !prev[category]
+    }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -117,6 +214,7 @@ export default function Sidebar({ onQuery, isLoading, onCancel, onClose }: Sideb
     localStorage.setItem('nw_port', port);
     localStorage.setItem('nw_username', username);
     localStorage.setItem('nw_password', password);
+    localStorage.setItem('nw_navigate_url', navigateUrl);
 
     const customKeysArray = customMetakeys
       .split(",")
@@ -131,7 +229,9 @@ export default function Sidebar({ onQuery, isLoading, onCancel, onClose }: Sideb
       username: username || import.meta.env.VITE_NW_USERNAME,
       password: password || import.meta.env.VITE_NW_PASSWORD,
       timeRange,
-      metakeys: ["ip.src", "ip.dst", "size", "netname", "direction", ...selectedKeys, ...customKeysArray],
+      homeLocation,
+      navigateUrl,
+      metakeys: ["ip.src", "ip.dst", "size", "netname", "direction", "time", ...Array.from(selectedKeys), ...customKeysArray],
     });
   };
 
@@ -158,194 +258,309 @@ export default function Sidebar({ onQuery, isLoading, onCancel, onClose }: Sideb
       >
         {/* Connection Settings */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            <Server size={16} />
-            <h2>Connection</h2>
+          <div 
+            className="flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-gray-100"
+            onClick={() => setIsConnectionOpen(!isConnectionOpen)}
+          >
+            <div className="flex items-center gap-2">
+              <Server size={16} />
+              <h2>Connection</h2>
+            </div>
+            {isConnectionOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <div className="col-span-2 space-y-1">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Host / IP</label>
-              <input
-                type="text"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder={import.meta.env.VITE_NW_HOST}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Port</label>
-              <input
-                type="text"
-                value={port}
-                onChange={(e) => setPort(e.target.value)}
-                placeholder={import.meta.env.VITE_NW_PORT}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-              />
-            </div>
-          </div>
+          {isConnectionOpen && (
+            <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2 space-y-1">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Host / IP</label>
+                  <input
+                    type="text"
+                    value={host}
+                    onChange={(e) => setHost(e.target.value)}
+                    placeholder={import.meta.env.VITE_NW_HOST}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Port</label>
+                  <input
+                    type="text"
+                    value={port}
+                    onChange={(e) => setPort(e.target.value)}
+                    placeholder={import.meta.env.VITE_NW_PORT}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Username</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder={import.meta.env.VITE_NW_USERNAME}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Username</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder={import.meta.env.VITE_NW_USERNAME}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={import.meta.env.VITE_NW_PASSWORD ? "••••••••" : ""}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={import.meta.env.VITE_NW_PASSWORD ? "••••••••" : ""}
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-              />
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Query Settings */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            <Filter size={16} />
-            <h2>Query Parameters</h2>
+          <div 
+            className="flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-gray-100"
+            onClick={() => setIsQueryOpen(!isQueryOpen)}
+          >
+            <div className="flex items-center gap-2">
+              <Filter size={16} />
+              <h2>Query Parameters</h2>
+            </div>
+            {isQueryOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Where Condition</label>
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. ip.src=10.10.10.50"
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm font-mono text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-              required
-            />
-          </div>
+          {isQueryOpen && (
+            <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 dark:text-gray-400">Where Condition</label>
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="e.g. ip.src=10.10.10.50"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm font-mono text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  required
+                />
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Time Range</label>
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-            >
-              {TIME_RANGES.map((tr) => (
-                <option key={tr.value} value={tr.value}>
-                  {tr.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 dark:text-gray-400">Time Range</label>
+                <select
+                  value={timeRange}
+                  onChange={(e) => setTimeRange(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                >
+                  {TIME_RANGES.map((tr) => (
+                    <option key={tr.value} value={tr.value}>
+                      {tr.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          <div className="space-y-1">
-            <label className="text-xs text-gray-500 dark:text-gray-400">Max Results (Size)</label>
-            <input
-              type="number"
-              value={size}
-              onChange={(e) => setSize(Number(e.target.value))}
-              min={1}
-              max={10000}
-              className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-              required
-            />
-          </div>
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 dark:text-gray-400">Max Results (Size)</label>
+                <input
+                  type="number"
+                  value={size}
+                  onChange={(e) => {
+                    let val = Number(e.target.value);
+                    if (val > 4000000000) val = 4000000000;
+                    if (val < 0) val = 0;
+                    setSize(val);
+                  }}
+                  min={0}
+                  max={4000000000}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  required
+                />
+              </div>
+              
+              <div className="space-y-1">
+                <div className="flex items-center gap-1">
+                  <MapPin size={12} className="text-gray-500 dark:text-gray-400" />
+                  <label className="text-xs text-gray-500 dark:text-gray-400">Default Home Location (Optional)</label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    type="number"
+                    step="any"
+                    value={homeLat}
+                    onChange={(e) => setHomeLat(e.target.value)}
+                    placeholder={import.meta.env.VITE_NW_HOME_LAT || "Latitude"}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  />
+                  <input
+                    type="number"
+                    step="any"
+                    value={homeLng}
+                    onChange={(e) => setHomeLng(e.target.value)}
+                    placeholder={import.meta.env.VITE_NW_HOME_LNG || "Longitude"}
+                    className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs text-gray-500 dark:text-gray-400">Navigate Base URL</label>
+                <input
+                  type="text"
+                  value={navigateUrl}
+                  onChange={(e) => setNavigateUrl(e.target.value)}
+                  placeholder={import.meta.env.VITE_NW_NAVIGATE_URL || "https://192.168.1.111/investigation/26/navigate/"}
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                />
+              </div>
+
+              <div className="space-y-2 pt-2 border-t border-gray-200 dark:border-gray-800">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={autoRefresh}
+                      onChange={(e) => setAutoRefresh(e.target.checked)}
+                      className="rounded text-[#BE3B37] dark:text-[#BE3B37] focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700"
+                    />
+                    Auto-refresh query
+                  </label>
+                </div>
+                {autoRefresh && (
+                  <div className="flex items-center gap-2 pl-6">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">Every</span>
+                    <input
+                      type="number"
+                      value={refreshInterval}
+                      onChange={(e) => setRefreshInterval(Number(e.target.value))}
+                      min={1}
+                      max={60}
+                      className="w-16 px-2 py-1 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-xs text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37]"
+                    />
+                    <span className="text-xs text-gray-500 dark:text-gray-400">minutes</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Metakeys Selection */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-            <Settings size={16} />
-            <h2>Metakeys (Select)</h2>
+          <div 
+            className="flex items-center justify-between text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer hover:text-gray-900 dark:hover:text-gray-100"
+            onClick={() => setIsMetakeysOpen(!isMetakeysOpen)}
+          >
+            <div className="flex items-center gap-2">
+              <Settings size={16} />
+              <h2>Metakeys (Select)</h2>
+            </div>
+            {isMetakeysOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
           </div>
 
-          <div className="space-y-2 pr-1">
-            <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 opacity-70 transition-colors duration-200">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                className="rounded text-[#BE3B37] dark:text-cyan-600 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
-              />
-              <span className="text-sm font-mono text-gray-700 dark:text-gray-400">ip.src</span>
-            </div>
-            <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 opacity-70 transition-colors duration-200">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                className="rounded text-[#BE3B37] dark:text-cyan-600 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
-              />
-              <span className="text-sm font-mono text-gray-700 dark:text-gray-400">ip.dst</span>
-            </div>
-            <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 opacity-70 transition-colors duration-200">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                className="rounded text-[#BE3B37] dark:text-cyan-600 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
-              />
-              <span className="text-sm font-mono text-gray-700 dark:text-gray-400">size</span>
-            </div>
-            <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 opacity-70 transition-colors duration-200">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                className="rounded text-[#BE3B37] dark:text-cyan-600 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
-              />
-              <span className="text-sm font-mono text-gray-700 dark:text-gray-400">netname</span>
-            </div>
+          {isMetakeysOpen && (
+            <div className="space-y-2 pr-1 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400">Mandatory Keys</span>
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleSelectAll} className="text-[10px] text-[#BE3B37] dark:text-[#BE3B37] hover:underline">Select All</button>
+                  <button type="button" onClick={handleSelectNone} className="text-[10px] text-[#BE3B37] dark:text-[#BE3B37] hover:underline">Select None</button>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                {["ip.src", "ip.dst", "size", "netname", "direction", "time"].map(key => (
+                  <div key={key} className="flex items-center gap-2 p-1.5 bg-gray-100 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 opacity-70 transition-colors duration-200">
+                    <input
+                      type="checkbox"
+                      checked
+                      disabled
+                      className="rounded text-[#BE3B37] dark:text-[#BE3B37] bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
+                    />
+                    <span className="text-xs font-mono text-gray-700 dark:text-gray-400 truncate">{key}</span>
+                  </div>
+                ))}
+              </div>
 
-            <div className="flex items-center gap-2 p-2 bg-gray-100 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-800 opacity-70 transition-colors duration-200">
-              <input
-                type="checkbox"
-                checked
-                disabled
-                className="rounded text-[#BE3B37] dark:text-cyan-600 bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
-              />
-              <span className="text-sm font-mono text-gray-700 dark:text-gray-400">direction</span>
+              <div className="space-y-3 mt-2">
+                {Object.entries(METAKEY_CATEGORIES).map(([category, keys]) => {
+                  const selectedCount = keys.filter(k => selectedKeys.has(k)).length;
+                  const allSelected = selectedCount === keys.length;
+                  const isExpanded = expandedCategories[category];
+                  
+                  return (
+                    <div key={category} className="border border-gray-200 dark:border-gray-800 rounded-md overflow-hidden">
+                      <div 
+                        className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-900/50 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        onClick={() => toggleCategoryExpand(category)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            ref={input => {
+                              if (input) {
+                                input.indeterminate = selectedCount > 0 && selectedCount < keys.length;
+                              }
+                            }}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleToggleCategory(category);
+                            }}
+                            className="rounded text-[#BE3B37] dark:text-[#BE3B37] focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700"
+                          />
+                          <span className="text-xs font-medium text-gray-700 dark:text-gray-300">{category}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+                            {selectedCount}/{keys.length}
+                          </span>
+                          {isExpanded ? <ChevronDown size={14} className="text-gray-500" /> : <ChevronRight size={14} className="text-gray-500" />}
+                        </div>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div className="grid grid-cols-2 gap-1 p-2 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800">
+                          {keys.map((key) => (
+                            <label
+                              key={key}
+                              className="flex items-center gap-2 p-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md cursor-pointer transition-colors duration-200"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedKeys.has(key)}
+                                onChange={() => handleToggleKey(key)}
+                                className="rounded text-[#BE3B37] dark:text-[#BE3B37] focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700"
+                              />
+                              <span
+                                className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate"
+                                title={key}
+                              >
+                                {key}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              
+              <div className="mt-4 space-y-1">
+                <label className="text-xs text-gray-500 dark:text-gray-400">Custom Metakeys (comma separated)</label>
+                <input
+                  type="text"
+                  value={customMetakeys}
+                  onChange={(e) => setCustomMetakeys(e.target.value)}
+                  placeholder="e.g. user.dst, eth.type"
+                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm font-mono text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] transition-colors duration-200"
+                />
+              </div>
             </div>
-
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {OPTIONAL_METAKEYS.map((key) => (
-                <label
-                  key={key}
-                  className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-800 rounded-md border border-transparent hover:border-gray-200 dark:hover:border-gray-700 cursor-pointer transition-colors duration-200"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedKeys.has(key)}
-                    onChange={() => handleToggleKey(key)}
-                    className="rounded text-[#BE3B37] dark:text-cyan-500 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 bg-white dark:bg-gray-950 border-gray-300 dark:border-gray-700"
-                  />
-                  <span
-                    className="text-xs font-mono text-gray-700 dark:text-gray-300 truncate"
-                    title={key}
-                  >
-                    {key}
-                  </span>
-                </label>
-              ))}
-            </div>
-            
-            <div className="mt-4 space-y-1">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Custom Metakeys (comma separated)</label>
-              <input
-                type="text"
-                value={customMetakeys}
-                onChange={(e) => setCustomMetakeys(e.target.value)}
-                placeholder="e.g. user.dst, eth.type"
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm font-mono text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] dark:focus:ring-cyan-500 transition-colors duration-200"
-              />
-            </div>
-          </div>
+          )}
         </div>
       </form>
 
