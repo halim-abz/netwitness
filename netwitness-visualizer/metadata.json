@@ -1,5 +1,5 @@
 {
-  "name": "Remix: NetWitness Visualizer 1.3 - Battikh",
+  "name": "NetWitness Visualizer",
   "description": "A web app that displays a network visualization map from NetWitness data.",
   "requestFramePermissions": []
 }

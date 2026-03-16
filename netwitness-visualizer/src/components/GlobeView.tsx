@@ -1,364 +1,276 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import Globe from 'react-globe.gl';
 import * as d3 from 'd3';
 import { GraphData, Node, Link } from '../types';
-import { Play, Pause, Activity, Database, Users, Search, Radar } from 'lucide-react';
+import { Play, Pause, Activity, Database, Users, Search, Radar, ChevronUp, ChevronDown } from 'lucide-react';
 import { formatBytes, formatNumber, formatDate } from '../lib/utils';
+import { getCountryCentroids } from '../lib/countryCentroids';
+import { useGlobe } from '../hooks/useGlobe';
+import { useTooltip } from '../hooks/useTooltip';
+import { processGlobeData } from '../lib/globeDataProcessor';
+
+// --- TYPES & INTERFACES ---
+
+type HoveredItem = Node | Link | null;
 
 interface GlobeViewProps {
   data: GraphData;
   onItemClick: (item: Node | Link) => void;
   isDark: boolean;
-  selectedItem?: Node | Link | null;
+  selectedItem?: HoveredItem;
+  homeLocation?: { lat: number; lng: number } | null;
+  onSetHomeLocation?: (loc: { lat: number; lng: number }) => void;
+  children?: React.ReactNode;
 }
 
-export default function GlobeView({ data, onItemClick, isDark, selectedItem }: GlobeViewProps) {
-  const globeRef = useRef<any>(null);
-  const [countries, setCountries] = useState({ features: [] });
-  const [autoRotate, setAutoRotate] = useState(true);
-  const [hoveredArc, setHoveredArc] = useState<any>(null);
-  const [showLabels, setShowLabels] = useState(false);
+interface GlobeArcData {
+  link: Link;
+  startLat: number;
+  startLng: number;
+  endLat: number;
+  endLng: number;
+  color: string | string[];
+  isTrack: boolean;
+}
+
+interface GlobeRingData {
+  node: Node;
+  lat: number;
+  lng: number;
+  color: string;
+  degree?: number;
+}
+
+interface GlobeLabelData {
+  lat: number;
+  lng: number;
+  text: string;
+  size: number;
+  color: string;
+  node?: Node;
+}
+
+// --- CONSTANTS ---
+
+const GLOBE_CONFIG = {
+  altitude: {
+    polygon: 0.007,
+    ring: 0.016,
+    label: 0.025,
+    defaultPOV: 2.5,
+    zoomPOV: 2.0,
+  },
+  radius: {
+    selectedNode: 5,
+    defaultNode: 3,
+    labelDot: 0.1,
+  },
+  animation: {
+    arcDashTime: 2000,
+    ringPropagationSpeed: 2,
+    ringRepeatPeriod: 1000,
+    povTransitionMs: 1000,
+  }
+} as const;
+
+// --- TYPE GUARDS ---
+
+const isLinkItem = (item: any): item is Link => item && 'source' in item && 'target' in item;
+const isNodeItem = (item: any): item is Node => item && 'id' in item && !('source' in item);
+
+// --- SUB-COMPONENTS ---
+
+/**
+ * Memoized Feed Item to prevent massive re-renders when globe state updates
+ */
+const LiveFeedItem = React.memo(({ 
+  item, 
+  isSelected, 
+  onClick 
+}: { 
+  item: any; 
+  isSelected: boolean; 
+  onClick: (item: any) => void 
+}) => {
+  return (
+    <div
+      onClick={() => onClick(item)}
+      className={`p-3 rounded-lg border cursor-pointer transition-colors animate-in fade-in slide-in-from-right-8 ${
+        isSelected
+          ? 'border-green-400 dark:border-green-500 bg-green-50 dark:bg-green-900/20 shadow-[0_0_10px_rgba(34,197,94,0.3)]'
+          : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
+      }`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
+          <span className="text-xs font-mono truncate max-w-[100px]" title={item.source}>{item.source}</span>
+        </div>
+        <span className="text-xs text-gray-500">&rarr;</span>
+        <span className="text-xs font-mono truncate max-w-[100px]" title={item.target}>{item.target}</span>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 mb-2">
+        {/* Render Tags */}
+        {[
+          { data: item.service, theme: 'px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-[9px] font-medium uppercase tracking-wider' },
+          { data: item.country, theme: 'px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded text-[9px] font-medium uppercase tracking-wider' },
+          { data: item.ioc, theme: 'px-1.5 py-0.5 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded text-[9px] font-medium uppercase tracking-wider' },
+          { data: item.boc, theme: 'px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 rounded text-[9px] font-medium uppercase tracking-wider' },
+          { data: item.eoc, theme: 'px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded text-[9px] font-medium uppercase tracking-wider' }
+        ].map(({ data, theme }, idx) => {
+          if (!data) return null;
+          return (
+            <div key={idx} className="flex flex-wrap gap-1">
+              {data.split(', ').map((tag: string) => (
+                <span key={tag} className={`${theme}`}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          );
+        })}
+
+        {item.aliasHost && (
+          <div className="text-[10px] text-gray-500 truncate" title={item.aliasHost}>
+            <span className="font-semibold">Host:</span> {item.aliasHost}
+          </div>
+        )}
+        {item.time > 0 && (
+          <div className="text-[10px] text-gray-500 truncate" title={formatDate(item.time)}>
+            <span className="font-semibold">Time:</span> {formatDate(item.time)}
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-between items-center mt-2 border-t border-gray-100 dark:border-gray-800 pt-2">
+        <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400">
+          {item.link.sessions?.length ?? 0} Session{(item.link.sessions?.length !== 1) ? 's' : ''}
+        </div>
+        <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 text-right">
+          {formatBytes(item.size)}
+        </div>
+      </div>
+    </div>
+  );
+});
+LiveFeedItem.displayName = 'LiveFeedItem';
+
+// --- MAIN COMPONENT ---
+
+export default function GlobeView({
+  data,
+  onItemClick,
+  isDark,
+  selectedItem,
+  homeLocation,
+  onSetHomeLocation,
+  children
+}: GlobeViewProps) {
+  const {
+    globeRef,
+    countries,
+    autoRotate,
+    setAutoRotate,
+    toggleAutoRotate,
+    globeSize,
+    containerRef,
+    isReady,
+    setIsReady,
+    showLabels
+  } = useGlobe(true);
+
+  const {
+    hoveredItem: hoveredItemNode,
+    setHoveredItem: setHoveredItemNode,
+    lastHoveredItem: lastHoveredItemNode,
+    tooltipRef,
+    updateTooltipPosition
+  } = useTooltip<HoveredItem>();
+
+  const [isLegendOpen, setIsLegendOpen] = useState(true);
+  const [hoveredArc, setHoveredArc] = useState<Link | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showThreatsOnly, setShowThreatsOnly] = useState(false);
   const [feedSort, setFeedSort] = useState<'time' | 'size'>('time');
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [globeSize, setGlobeSize] = useState({ width: 0, height: 0 });
-  const [hoveredItemNode, setHoveredItemNode] = useState<any>(null);
-  const [lastHoveredItemNode, setLastHoveredItemNode] = useState<any>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
-  const mousePosRef = useRef({ x: 0, y: 0 });
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isShiftDownRef = useRef(false);
 
+  // Keyboard events
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Shift') isShiftDownRef.current = true; };
+    const handleKeyUp = (e: KeyboardEvent) => { if (e.key === 'Shift') isShiftDownRef.current = false; };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      mousePosRef.current = { x: e.clientX, y: e.clientY };
-    };
-
-    container.addEventListener('mousemove', handleMouseMove);
-    return () => container.removeEventListener('mousemove', handleMouseMove);
-  }, []);
-
-  useEffect(() => {
-    if (hoveredItemNode) {
-      setLastHoveredItemNode(hoveredItemNode);
-      if (tooltipRef.current) {
-        tooltipRef.current.style.transform = `translate(${mousePosRef.current.x + 15}px, ${mousePosRef.current.y + 15}px)`;
-      }
-    }
-  }, [hoveredItemNode]);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver((entries) => {
-      if (entries[0]) {
-        const { width, height } = entries[0].contentRect;
-        setGlobeSize({ width, height });
-      }
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    fetch('https://raw.githubusercontent.com/vasturiano/react-globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson')
-      .then(res => res.json())
-      .then(setCountries);
-  }, []);
-
-  useEffect(() => {
-    let interval: any;
-    const enableRotation = () => {
-      if (globeRef.current && globeRef.current.controls && globeRef.current.controls()) {
-        globeRef.current.controls().autoRotate = autoRotate;
-        globeRef.current.controls().autoRotateSpeed = 0.5;
-        // Prevent zooming inside the globe
-        globeRef.current.controls().minDistance = 120;
-        globeRef.current.controls().maxDistance = 400;
-        return true;
-      }
-      return false;
-    };
-    
-    if (!enableRotation()) {
-      interval = setInterval(() => {
-        if (enableRotation()) clearInterval(interval);
-      }, 200);
-    }
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     
     return () => {
-      if (interval) clearInterval(interval);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [autoRotate]);
+  }, []);
 
-  useEffect(() => {
-    let animationFrameId: number;
-    const checkZoom = () => {
-      if (globeRef.current && globeRef.current.camera && globeRef.current.camera()?.position) {
-        // The distance from the camera to the center of the globe
-        const distance = globeRef.current.camera().position.length();
-        // Globe radius is typically 100 in react-globe.gl
-        if (distance < 180 && !showLabels) {
-          setShowLabels(true);
-        } else if (distance >= 180 && showLabels) {
-          setShowLabels(false);
-        }
-      }
-      animationFrameId = requestAnimationFrame(checkZoom);
-    };
-    checkZoom();
-    return () => cancelAnimationFrame(animationFrameId);
-  }, [showLabels]);
-
-  const countryCentroids = useMemo(() => {
-    const map = new Map<string, {lat: number, lng: number}>();
-    if (countries?.features) {
-      countries.features.forEach((f: any) => {
-        try {
-          const centroid = d3.geoCentroid(f);
-          const name = f.properties?.NAME;
-          const isoA2 = f.properties?.ISO_A2;
-          if (name) map.set(name.toLowerCase(), {lat: centroid[1], lng: centroid[0]});
-          if (isoA2) map.set(isoA2.toLowerCase(), {lat: centroid[1], lng: centroid[0]});
-        } catch (e) {}
-      });
-    }
-    // Add some common mappings if needed
-    map.set('us', {lat: 37.0902, lng: -95.7129});
-    map.set('united states', {lat: 37.0902, lng: -95.7129});
-    map.set('gb', {lat: 55.3781, lng: -3.4360});
-    map.set('uk', {lat: 55.3781, lng: -3.4360});
-    return map;
-  }, [countries]);
+  const countryCentroids = useMemo(() => getCountryCentroids(countries), [countries]);
 
   const { arcsData, ringsData, stats, liveFeed } = useMemo(() => {
-    const arcs: any[] = [];
-    let totalSize = 0;
-    const uniqueIPs = new Set<string>();
-    const feed: any[] = [];
+    return processGlobeData(data, searchQuery, showThreatsOnly, feedSort, countryCentroids);
+  }, [data, searchQuery, showThreatsOnly, feedSort, countryCentroids]);
 
-    const nodesById = new Map(data.nodes.map(n => [n.id, n]));
-
-    const filteredLinks = data.links.filter((link: any) => {
-      if (showThreatsOnly) {
-        let hasThreat = false;
-        link.sessions?.forEach((s: any) => {
-          if (s.ioc || s.eoc || s.boc) hasThreat = true;
-        });
-        if (!hasThreat) return false;
-      }
-
-      if (!searchQuery) return true;
-      
-      const isExclude = searchQuery.startsWith('!');
-      const q = isExclude ? searchQuery.slice(1).toLowerCase() : searchQuery.toLowerCase();
-      
-      if (!q) return true;
-
-      const sourceNode = typeof link.source === 'string' ? nodesById.get(link.source) : link.source;
-      const targetNode = typeof link.target === 'string' ? nodesById.get(link.target) : link.target;
-      
-      let match = false;
-      if (sourceNode?.id.toLowerCase().includes(q) || targetNode?.id.toLowerCase().includes(q)) match = true;
-      
-      link.sessions?.forEach((s: any) => {
-        if (s.service && String(s.service).toLowerCase().includes(q)) match = true;
-        if (s['country.dst'] && String(s['country.dst']).toLowerCase().includes(q)) match = true;
-        if (s['country.src'] && String(s['country.src']).toLowerCase().includes(q)) match = true;
-        if (s['alias.host'] && String(s['alias.host']).toLowerCase().includes(q)) match = true;
-      });
-      if (sourceNode?.country?.toLowerCase().includes(q) || targetNode?.country?.toLowerCase().includes(q)) match = true;
-      
-      return isExclude ? !match : match;
-    });
-
-    const nodeSeverities = new Map<string, number>();
-    filteredLinks.forEach((link: any) => {
-      let hasIoc = false;
-      let hasBoc = false;
-      let hasEoc = false;
-      link.sessions?.forEach((s: any) => {
-        if (s.ioc) hasIoc = true;
-        if (s.boc) hasBoc = true;
-        if (s.eoc) hasEoc = true;
-      });
-      const severity = hasIoc ? 3 : hasBoc ? 2 : hasEoc ? 1 : 0;
-      
-      const sourceId = typeof link.source === 'string' ? link.source : link.source.id;
-      const targetId = typeof link.target === 'string' ? link.target : link.target.id;
-      
-      nodeSeverities.set(sourceId, Math.max(severity, nodeSeverities.get(sourceId) || 0));
-      nodeSeverities.set(targetId, Math.max(severity, nodeSeverities.get(targetId) || 0));
-    });
-
-    const getColorFromSeverity = (sev: number) => sev === 3 ? '#ef4444' : sev === 2 ? '#f97316' : sev === 1 ? '#eab308' : '#3b82f6';
-    const uniqueNodes = new Map<string, any>();
-
-    filteredLinks.forEach((link: any) => {
-      const sourceNode = typeof link.source === 'string' ? nodesById.get(link.source) : link.source;
-      const targetNode = typeof link.target === 'string' ? nodesById.get(link.target) : link.target;
-
-      if (!sourceNode || !targetNode) return;
-
-      uniqueIPs.add(sourceNode.id);
-      uniqueIPs.add(targetNode.id);
-      totalSize += link.size || 0;
-
-      const srcColor = getColorFromSeverity(nodeSeverities.get(sourceNode.id) || 0);
-      const dstColor = getColorFromSeverity(nodeSeverities.get(targetNode.id) || 0);
-
-      const getCoords = (node: any) => {
-        if (node.lat !== undefined && node.lng !== undefined && !isNaN(node.lat) && !isNaN(node.lng)) {
-          return { lat: node.lat, lng: node.lng };
-        }
-        if (node.country) {
-          const centroid = countryCentroids.get(node.country.toLowerCase());
-          if (centroid) return centroid;
-        }
-        return null;
-      };
-
-      const srcCoords = getCoords(sourceNode);
-      const dstCoords = getCoords(targetNode);
-
-      let services = new Set<string>();
-      let countries = new Set<string>();
-      let aliasHosts = new Set<string>();
-      let iocs = new Set<string>();
-      let bocs = new Set<string>();
-      let eocs = new Set<string>();
-      let latestTime = 0;
-
-      link.sessions?.forEach((s: any) => {
-        if (s.service) (Array.isArray(s.service) ? s.service : [s.service]).forEach((x: string) => services.add(x));
-        if (s['country.dst']) (Array.isArray(s['country.dst']) ? s['country.dst'] : [s['country.dst']]).forEach((x: string) => countries.add(x));
-        if (s['country.src']) (Array.isArray(s['country.src']) ? s['country.src'] : [s['country.src']]).forEach((x: string) => countries.add(x));
-        if (s['alias.host']) (Array.isArray(s['alias.host']) ? s['alias.host'] : [s['alias.host']]).forEach((x: string) => aliasHosts.add(x));
-        if (s.ioc) (Array.isArray(s.ioc) ? s.ioc : [s.ioc]).forEach((x: string) => iocs.add(x));
-        if (s.boc) (Array.isArray(s.boc) ? s.boc : [s.boc]).forEach((x: string) => bocs.add(x));
-        if (s.eoc) (Array.isArray(s.eoc) ? s.eoc : [s.eoc]).forEach((x: string) => eocs.add(x));
-        if (s.time) {
-          const t = Array.isArray(s.time) ? parseInt(s.time[0]) : parseInt(s.time);
-          if (t > latestTime) latestTime = t;
-        }
-      });
-
-      if (sourceNode.country) countries.add(sourceNode.country);
-      if (targetNode.country) countries.add(targetNode.country);
-
-      let linkHasIoc = false;
-      let linkHasBoc = false;
-      let linkHasEoc = false;
-      link.sessions?.forEach((s: any) => {
-        if (s.ioc) linkHasIoc = true;
-        if (s.boc) linkHasBoc = true;
-        if (s.eoc) linkHasEoc = true;
-      });
-      const linkColor = linkHasIoc ? '#ef4444' : linkHasBoc ? '#f97316' : linkHasEoc ? '#eab308' : '#3b82f6';
-
-      feed.push({
-        id: `${sourceNode.id}-${targetNode.id}`,
-        source: sourceNode.id,
-        target: targetNode.id,
-        sourceNode,
-        targetNode,
-        srcCoords,
-        dstCoords,
-        srcColor,
-        dstColor,
-        color: linkColor,
-        link,
-        size: link.size || 0,
-        time: latestTime,
-        service: Array.from(services).join(', '),
-        country: Array.from(countries).join(', '),
-        aliasHost: Array.from(aliasHosts).join(', '),
-        ioc: Array.from(iocs).join(', '),
-        boc: Array.from(bocs).join(', '),
-        eoc: Array.from(eocs).join(', '),
-      });
-    });
-
-    feed.sort((a, b) => {
-      if (feedSort === 'time') return b.time - a.time;
-      return b.size - a.size;
-    });
-
-    // Limit arcs to top 500 to maintain smooth WebGL performance
-    const topFeed = feed.slice(0, 500);
-    topFeed.forEach((item) => {
-      if (item.srcCoords && !uniqueNodes.has(item.source)) {
-        uniqueNodes.set(item.source, { lat: item.srcCoords.lat, lng: item.srcCoords.lng, color: item.srcColor, node: item.sourceNode });
-      }
-      if (item.dstCoords && !uniqueNodes.has(item.target)) {
-        uniqueNodes.set(item.target, { lat: item.dstCoords.lat, lng: item.dstCoords.lng, color: item.dstColor, node: item.targetNode });
-      }
-
-      if (item.srcCoords && item.dstCoords) {
-        const arcBase = {
-          startLat: item.srcCoords.lat,
-          startLng: item.srcCoords.lng,
-          endLat: item.dstCoords.lat,
-          endLng: item.dstCoords.lng,
-          color: [item.srcColor, item.dstColor],
-          link: item.link,
-          name: `${item.source} -> ${item.target}`
-        };
-        arcs.push({ ...arcBase, isTrack: true });
-        arcs.push({ ...arcBase, isTrack: false });
-      }
-    });
-
-    return {
-      arcsData: arcs,
-      ringsData: Array.from(uniqueNodes.values()),
-      stats: {
-        flows: filteredLinks.length,
-        size: totalSize,
-        ips: uniqueIPs.size
-      },
-      liveFeed: feed
-    };
-  }, [data, countryCentroids, searchQuery, feedSort, showThreatsOnly]);
-
-  const labelsData = useMemo(() => {
+  const labelsData = useMemo((): GlobeLabelData[] => {
     if (!showLabels || !countries?.features) return [];
-    return countries.features.map((f: any) => {
+    
+    return countries.features.reduce((acc: GlobeLabelData[], feature: any) => {
       try {
-        const centroid = d3.geoCentroid(f);
-        return {
-          lat: centroid[1],
-          lng: centroid[0],
-          text: f.properties?.NAME || '',
+        const name = feature.properties?.NAME;
+        if (!name) return acc;
+        
+        const centroid = countryCentroids.get(name.toLowerCase()) || {
+          lat: d3.geoCentroid(feature)[1],
+          lng: d3.geoCentroid(feature)[0]
+        };
+        
+        acc.push({
+          lat: centroid.lat,
+          lng: centroid.lng,
+          text: name,
           size: 0.3,
           color: isDark ? 'rgba(255,255,255,0.8)' : '#e5e7eb'
-        };
+        });
       } catch (e) {
-        return null;
+        console.warn('Failed to parse geographical centroid for label', e);
       }
-    }).filter(Boolean) as any[];
-  }, [countries, showLabels, isDark]);
+      return acc;
+    }, []);
+  }, [countries, showLabels, isDark, countryCentroids]);
+
+  // --- INTERACTION HANDLERS ---
 
   useEffect(() => {
-    if (selectedItem && globeRef.current) {
+    if (!globeRef.current || !isReady) return;
+
+    if (selectedItem) {
       let targetLat: number | undefined;
       let targetLng: number | undefined;
       
-      if ('source' in selectedItem && 'target' in selectedItem) {
+      if (isLinkItem(selectedItem)) {
         const sourceId = typeof selectedItem.source === 'string' ? selectedItem.source : selectedItem.source.id;
-        let ringNode = ringsData.find(r => r.node.id === sourceId);
+        const targetId = typeof selectedItem.target === 'string' ? selectedItem.target : selectedItem.target.id;
         
-        if (!ringNode) {
-          const targetId = typeof selectedItem.target === 'string' ? selectedItem.target : selectedItem.target.id;
-          ringNode = ringsData.find(r => r.node.id === targetId);
-        }
+        const ringNodeSrc = ringsData.find(r => r.node.id === sourceId);
+        const ringNodeDst = ringsData.find(r => r.node.id === targetId);
+        
+        // Prefer public network targets for point of view
+        const ringNode = (ringNodeDst?.node.networkType === 'public') ? ringNodeDst 
+                       : (ringNodeSrc?.node.networkType === 'public') ? ringNodeSrc 
+                       : (ringNodeDst || ringNodeSrc);
 
         if (ringNode) {
           targetLat = ringNode.lat;
           targetLng = ringNode.lng;
         }
-      } else if ('id' in selectedItem) {
+      } else if (isNodeItem(selectedItem)) {
         const ringNode = ringsData.find(r => r.node.id === selectedItem.id);
         if (ringNode) {
           targetLat = ringNode.lat;
@@ -369,341 +281,339 @@ export default function GlobeView({ data, onItemClick, isDark, selectedItem }: G
       if (targetLat !== undefined && targetLng !== undefined) {
         setAutoRotate(false);
         setTimeout(() => {
-          if (globeRef.current) {
-            globeRef.current.pointOfView({ lat: targetLat, lng: targetLng, altitude: 2.0 }, 1000);
-          }
+          globeRef.current?.pointOfView(
+            { lat: targetLat!, lng: targetLng!, altitude: GLOBE_CONFIG.altitude.zoomPOV }, 
+            GLOBE_CONFIG.animation.povTransitionMs
+          );
         }, 50);
       }
+    } else {
+      const currentPOV = globeRef.current.pointOfView();
+      globeRef.current.pointOfView(
+        { lat: currentPOV.lat, lng: currentPOV.lng, altitude: GLOBE_CONFIG.altitude.defaultPOV }, 
+        GLOBE_CONFIG.animation.povTransitionMs
+      );
+      setAutoRotate(true);
     }
-  }, [selectedItem, ringsData]);
+  }, [selectedItem, ringsData, isReady, globeRef, setAutoRotate]);
 
-  const handleItemClick = (item: any, lat?: number, lng?: number) => {
+  const handleItemClick = useCallback((item: HoveredItem) => {
+    if (!item) return;
     setAutoRotate(false);
     onItemClick(item);
-  };
+  }, [onItemClick, setAutoRotate]);
+
+  const handleRightClick = useCallback((lat: number, lng: number, event: MouseEvent) => {
+    const isShift = event?.shiftKey || isShiftDownRef.current;
+    if (isShift && onSetHomeLocation) {
+      onSetHomeLocation({ lat, lng });
+      setToastMessage('Home Location Updated');
+      
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 3000);
+    }
+  }, [onSetHomeLocation]);
+
+  const handleFeedItemClick = useCallback((item: any) => {
+    const ringNode = ringsData.find(r => r.node.id === item.source) || ringsData.find(r => r.node.id === item.target);
+    // While clicking feed items, zoom to available node but select the link
+    handleItemClick(item.link);
+  }, [ringsData, handleItemClick]);
+
+  // --- RENDER HELPERS ---
+  const checkSelectionMatch = useCallback((nodeId: string) => {
+    if (!selectedItem) return false;
+    if (isNodeItem(selectedItem)) return selectedItem.id === nodeId;
+    if (isLinkItem(selectedItem)) {
+      const srcMatch = typeof selectedItem.source === 'string' ? selectedItem.source === nodeId : selectedItem.source?.id === nodeId;
+      const tgtMatch = typeof selectedItem.target === 'string' ? selectedItem.target === nodeId : selectedItem.target?.id === nodeId;
+      return srcMatch || tgtMatch;
+    }
+    return false;
+  }, [selectedItem]);
 
   return (
     <div className="relative w-full h-full flex overflow-hidden">
       <div 
-        className="flex-1 min-w-0 relative" 
+        className="flex-1 relative min-w-0" 
         ref={containerRef}
+        onPointerDown={() => autoRotate && setAutoRotate(false)}
+        onWheel={() => autoRotate && setAutoRotate(false)}
       >
         {globeSize.width > 0 && (
           <Globe
             ref={globeRef}
             width={globeSize.width}
             height={globeSize.height}
-            globeImageUrl={isDark ? "//unpkg.com/three-globe/example/img/earth-dark.jpg" : "//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"}
-            bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-            backgroundImageUrl={isDark ? "//unpkg.com/three-globe/example/img/night-sky.png" : ""}
+            globeImageUrl={isDark ? "/files/earth-dark.jpg" : "/files/earth-blue-marble.jpg"}
+            bumpImageUrl="/files/earth-topology.png"
+            backgroundImageUrl={isDark ? "/files/night-sky.png" : ""}
             backgroundColor={isDark ? "#020617" : "#f8fafc"}
             
+            // Polygons
             polygonsData={countries.features}
-            polygonAltitude={0.01}
-            polygonCapColor={() => 'rgba(0, 0, 0, 0)'}
+            polygonAltitude={GLOBE_CONFIG.altitude.polygon}
+            polygonCapColor={() => isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'}
             polygonSideColor={() => 'rgba(0, 100, 255, 0.15)'}
             polygonStrokeColor={() => isDark ? '#334155' : '#cbd5e1'}
+            onPolygonRightClick={(polygon: object, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
             
+            // Arcs
             arcsData={arcsData}
-            arcColor={(d: any) => {
-              const isSelected = selectedItem === d.link;
-              if (isSelected) return ['#bbf7d0', '#22c55e'];
-              return d.isTrack ? [d.color[0] + '40', d.color[1] + '40'] : d.color;
+            arcColor={(arc: GlobeArcData) => {
+              if (selectedItem === arc.link) return ['#bbf7d0', '#22c55e'];
+              const col = arc.color as string[];
+              return arc.isTrack ? [col[0] + '40', col[1] + '40'] : col;
             }}
-          arcDashLength={(d: any) => d.isTrack ? 1 : 0.4}
-          arcDashGap={(d: any) => d.isTrack ? 0 : 0.2}
-          arcDashAnimateTime={(d: any) => d.isTrack ? 0 : 1500}
-          arcStroke={(d: any) => {
-            const isSelected = selectedItem === d.link;
-            return isSelected ? 2 : (hoveredArc === d.link ? 1.5 : (d.isTrack ? 0.2 : 0.5));
-          }}
-          onArcHover={(d: any) => {
-            setHoveredArc(d ? d.link : null);
-            setHoveredItemNode(d ? d.link : null);
-          }}
-          onArcClick={(d: any) => handleItemClick(d.link, d.startLat, d.startLng)}
-          
-          ringsData={ringsData}
-          ringColor={(d: any) => {
-            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
-            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
-              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
-              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
-            );
-            return isSelectedNode || isSelectedLink ? '#22c55e' : d.color;
-          }}
-          ringMaxRadius={(d: any) => {
-            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
-            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
-              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
-              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
-            );
-            return isSelectedNode || isSelectedLink ? 5 : 3;
-          }}
-          ringPropagationSpeed={2}
-          ringRepeatPeriod={1000}
+            arcDashLength={(arc: GlobeArcData) => selectedItem === arc.link ? 1 : 0.4}
+            arcDashGap={(arc: GlobeArcData) => selectedItem === arc.link ? 0 : 4}
+            arcDashInitialGap={(arc: GlobeArcData) => selectedItem === arc.link ? 0 : Math.random() * 5}
+            arcDashAnimateTime={GLOBE_CONFIG.animation.arcDashTime}
+            arcStroke={(arc: GlobeArcData) => selectedItem === arc.link ? 2 : (hoveredArc === arc.link ? 1.5 : (arc.isTrack ? 0.2 : 0.5))}
+            onArcHover={(arc: GlobeArcData | null) => {
+              setHoveredArc(arc?.link ?? null);
+              setHoveredItemNode(arc?.link ?? null);
+              if (arc) updateTooltipPosition();
+            }}
+            onArcClick={(arc: GlobeArcData) => handleItemClick(arc.link)}
+            onArcRightClick={(arc: GlobeArcData, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
+            
+            // Rings
+            ringsData={ringsData}
+            ringColor={(ring: GlobeRingData) => checkSelectionMatch(ring.node.id) ? '#22c55e' : ring.color}
+            ringMaxRadius={(ring: GlobeRingData) => checkSelectionMatch(ring.node.id) ? GLOBE_CONFIG.radius.selectedNode : GLOBE_CONFIG.radius.defaultNode}
+            ringPropagationSpeed={GLOBE_CONFIG.animation.ringPropagationSpeed}
+            ringRepeatPeriod={GLOBE_CONFIG.animation.ringRepeatPeriod}
+            ringAltitude={GLOBE_CONFIG.altitude.ring}
 
-          pointsData={ringsData}
-          pointColor={(d: any) => {
-            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
-            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
-              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
-              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
-            );
-            return isSelectedNode || isSelectedLink ? '#22c55e' : d.color;
-          }}
-          pointAltitude={0.02}
-          pointRadius={(d: any) => {
-            const isSelectedNode = selectedItem && 'id' in selectedItem && selectedItem.id === d.node.id;
-            const isSelectedLink = selectedItem && !('id' in selectedItem) && (
-              (typeof selectedItem.source === 'string' ? selectedItem.source === d.node.id : selectedItem.source?.id === d.node.id) ||
-              (typeof selectedItem.target === 'string' ? selectedItem.target === d.node.id : selectedItem.target?.id === d.node.id)
-            );
-            return isSelectedNode || isSelectedLink ? 1.0 : 0.5;
-          }}
-          onPointHover={(d: any) => setHoveredItemNode(d ? d.node : null)}
-          onPointClick={(d: any) => handleItemClick(d.node, d.lat, d.lng)}
-
-          labelsData={labelsData}
-          labelLat="lat"
-          labelLng="lng"
-          labelText="text"
-          labelSize="size"
-          labelColor="color"
-          labelAltitude={0.02}
-          labelDotRadius={0.1}
-          labelResolution={2}
-          onLabelClick={(d: any) => handleItemClick(d.node, d.lat, d.lng)}
-        />
+            // Points
+            pointsData={ringsData}
+            pointColor={(pt: GlobeRingData) => checkSelectionMatch(pt.node.id) ? '#22c55e' : pt.color}
+            pointAltitude={(pt: GlobeRingData) => Math.min(0.15, 0.025 + (pt.degree ?? 0) * 0.005)}
+            pointRadius={(pt: GlobeRingData) => checkSelectionMatch(pt.node.id) ? 1.0 : 0.5}
+            onPointHover={(pt: GlobeRingData | null) => {
+              setHoveredItemNode(pt?.node ?? null);
+              if (pt) updateTooltipPosition();
+            }}
+            onPointClick={(pt: GlobeRingData) => handleItemClick(pt.node)}
+            onPointRightClick={(pt: GlobeRingData, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
+            
+            // Labels
+            labelsData={labelsData}
+            labelLat="lat"
+            labelLng="lng"
+            labelText="text"
+            labelSize="size"
+            labelColor="color"
+            labelAltitude={GLOBE_CONFIG.altitude.label}
+            labelDotRadius={GLOBE_CONFIG.radius.labelDot}
+            labelResolution={2}
+            onLabelClick={(lbl: GlobeLabelData) => handleItemClick(lbl.node ?? null)}
+            onLabelRightClick={(lbl: GlobeLabelData, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
+            
+            // Global Events
+            onGlobeRightClick={({ lat, lng }, event: MouseEvent) => handleRightClick(lat, lng, event)}
+            onGlobeReady={() => {
+              if (!selectedItem) {
+                setTimeout(() => {
+                  const pov = { 
+                    lat: homeLocation?.lat ?? 39.8283, 
+                    lng: homeLocation?.lng ?? -98.5795, 
+                    altitude: GLOBE_CONFIG.altitude.defaultPOV 
+                  };
+                  globeRef.current?.pointOfView(pov, 0);
+                  setIsReady(true);
+                  setAutoRotate(true);
+                }, 100);
+              } else {
+                setIsReady(true);
+              }
+            }}
+          />
         )}
 
-        <button
-          onClick={() => setAutoRotate(!autoRotate)}
-          className="absolute bottom-6 right-6 p-3 bg-gray-900/80 border border-gray-700 rounded-full text-white shadow-lg hover:bg-gray-800 transition-colors backdrop-blur-sm z-10"
-          title={autoRotate ? "Pause Rotation" : "Resume Rotation"}
-        >
-          {autoRotate ? <Pause size={20} /> : <Play size={20} />}
-        </button>
-      </div>
-
-      {/* UI Overlay */}
-      <div className="hidden lg:flex w-80 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-l border-gray-200 dark:border-gray-800 flex-col h-full z-10 shrink-0">
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <Radar className="text-[#BE3B37]" size={20} />
-            Network Telemetry
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg animate-in fade-in slide-in-from-top-2" style={{ animationDelay: '100ms' }}>
-              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
-                <Activity size={14} />
-                <span className="text-xs font-semibold uppercase">Flows</span>
-              </div>
-              <div className="text-xl font-bold">{formatNumber(stats.flows)}</div>
-            </div>
-            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg animate-in fade-in slide-in-from-top-2" style={{ animationDelay: '200ms' }}>
-              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
-                <Users size={14} />
-                <span className="text-xs font-semibold uppercase">Unique IPs</span>
-              </div>
-              <div className="text-xl font-bold">{formatNumber(stats.ips)}</div>
-            </div>
-            <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg col-span-2 animate-in fade-in slide-in-from-top-2" style={{ animationDelay: '300ms' }}>
-              <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
-                <Database size={14} />
-                <span className="text-xs font-semibold uppercase">Total Payload</span>
-              </div>
-              <div className="text-xl font-bold">{formatBytes(stats.size)}</div>
-            </div>
-          </div>
+        {/* Global UI Overlays */}
+        <div className="absolute bottom-6 right-6 z-20">
+          <button
+            onClick={toggleAutoRotate}
+            className="p-3 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-full shadow-lg text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 transition-all border border-gray-200 dark:border-gray-700"
+            title={autoRotate ? "Pause Rotation" : "Resume Rotation"}
+          >
+            {autoRotate ? <Pause size={20} /> : <Play size={20} />}
+          </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-bold uppercase text-gray-500 dark:text-gray-400 flex items-center gap-2">
-              <Activity size={16} className="text-[#BE3B37]" />
-              Live Feed
-            </h3>
-            <select 
-              value={feedSort} 
-              onChange={(e) => setFeedSort(e.target.value as 'time' | 'size')}
-              className="text-xs bg-gray-100 dark:bg-gray-800 border-none rounded px-2 py-1 outline-none focus:ring-1 focus:ring-[#BE3B37] dark:focus:ring-[#BE3B37] text-gray-700 dark:text-gray-300 cursor-pointer transition-shadow"
-            >
-              <option value="time">Chronological</option>
-              <option value="size">Volume</option>
-            </select>
+        {toastMessage && (
+          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-green-500/90 backdrop-blur-sm text-white px-4 py-2.5 rounded-lg shadow-lg font-medium flex items-center gap-2 transition-all duration-300">
+            <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            {toastMessage}
           </div>
-          
-          <div className="flex items-center justify-between mb-4 shrink-0 gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
-              <input 
-                type="text" 
-                placeholder="Filter IPs, service, country..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-gray-100 dark:bg-gray-800 border-none rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-[#BE3B37] dark:text-gray-200 outline-none transition-shadow"
-              />
+        )}
+
+        <div className="absolute bottom-6 left-6 bg-white/90 dark:bg-slate-900/90 rounded-lg shadow-lg backdrop-blur-sm border border-gray-200 dark:border-gray-800 text-xs z-10 overflow-hidden transition-all duration-300">
+          <button 
+            onClick={() => setIsLegendOpen(!isLegendOpen)}
+            className="flex items-center justify-between w-full p-3 font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+          >
+            <span>Threat Level</span>
+            {isLegendOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+          </button>
+          {isLegendOpen && (
+            <div className="p-3 pt-0">
+              <div className="flex items-center gap-2 mb-1"><div className="w-3 h-3 rounded-full bg-red-500" /><span className="text-gray-600 dark:text-gray-400">IOC Exists</span></div>
+              <div className="flex items-center gap-2 mb-1"><div className="w-3 h-3 rounded-full bg-orange-500" /><span className="text-gray-600 dark:text-gray-400">BOC Exists</span></div>
+              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-yellow-500" /><span className="text-gray-600 dark:text-gray-400">EOC Exists</span></div>
             </div>
-            <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 py-2 px-2.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
-              <input 
-                type="checkbox" 
-                checked={showThreatsOnly}
-                onChange={(e) => setShowThreatsOnly(e.target.checked)}
-                className="rounded text-[#BE3B37] focus:ring-[#BE3B37] bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
-              />
-              Threats
-            </label>
+          )}
+        </div>
+      </div>
+
+      {/* Side Panels */}
+      <div className="flex h-full shrink-0 z-10">
+        {children}
+        
+        <div className="hidden lg:flex w-80 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-l border-gray-200 dark:border-gray-800 flex-col h-full shrink-0">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-800">
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <Radar className="text-[#B63830]" size={20} />
+              Network Telemetry
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg animate-in fade-in slide-in-from-top-2 delay-100 fill-mode-both">
+                <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
+                  <Activity size={14} />
+                  <span className="text-xs font-semibold uppercase">Flows</span>
+                </div>
+                <div className="text-xl font-bold">{formatNumber(stats.flows)}</div>
+              </div>
+              <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg animate-in fade-in slide-in-from-top-2 delay-200 fill-mode-both">
+                <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
+                  <Users size={14} />
+                  <span className="text-xs font-semibold uppercase">Unique IPs</span>
+                </div>
+                <div className="text-xl font-bold">{formatNumber(stats.ips)}</div>
+              </div>
+              <div className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg col-span-2 animate-in fade-in slide-in-from-top-2 delay-300 fill-mode-both">
+                <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
+                  <Database size={14} />
+                  <span className="text-xs font-semibold uppercase">Total Payload</span>
+                </div>
+                <div className="text-xl font-bold">{formatBytes(stats.size)}</div>
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-2 overflow-y-auto flex-1 pr-1">
-            {liveFeed.slice(0, 100).map((item, i) => {
-              const isSelected = selectedItem === item.link;
-              return (
-              <div 
-                key={i}
-                onClick={() => {
-                  let ringNode = ringsData.find(r => r.node.id === item.source);
-                  if (!ringNode) {
-                    ringNode = ringsData.find(r => r.node.id === item.target);
-                  }
-                  handleItemClick(item.link, ringNode?.lat, ringNode?.lng);
-                }}
-                className={`p-3 rounded-lg border cursor-pointer transition-colors animate-in fade-in slide-in-from-right-8 ${
-                  isSelected 
-                    ? 'border-green-400 dark:border-green-500 bg-green-50 dark:bg-green-900/20 shadow-[0_0_10px_rgba(34,197,94,0.3)]' 
-                    : 'border-gray-200 dark:border-gray-800 hover:border-gray-300 dark:hover:border-gray-700 bg-gray-50 dark:bg-gray-800/50'
-                }`}
-                style={{ animationDelay: `${Math.min(i * 50, 500)}ms` }}
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold uppercase text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                <Activity size={16} className="text-[#B63830]" />
+                Flows Feed
+              </h3>
+              <select 
+                value={feedSort} 
+                onChange={(e) => setFeedSort(e.target.value as 'time' | 'size')}
+                className="text-xs bg-gray-100 dark:bg-gray-800 border-none rounded px-2 py-1 outline-none focus:ring-1 focus:ring-[#B63830] dark:focus:ring-[#B63830] text-gray-700 dark:text-gray-300 cursor-pointer transition-shadow"
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-xs font-mono truncate max-w-[100px]" title={item.source}>{item.source}</span>
-                  </div>
-                  <span className="text-xs text-gray-500">&rarr;</span>
-                  <span className="text-xs font-mono truncate max-w-[100px]" title={item.target}>{item.target}</span>
-                </div>
-                
-                <div className="grid grid-cols-1 gap-2 mb-2">
-                  {item.service && (
-                    <div className="flex flex-wrap gap-1">
-                      {item.service.split(', ').map((s: string) => (
-                        <span key={s} className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-[9px] font-medium uppercase tracking-wider">{s}</span>
-                      ))}
-                    </div>
-                  )}
-                  {item.country && (
-                    <div className="flex flex-wrap gap-1">
-                      {item.country.split(', ').map((c: string) => (
-                        <span key={c} className="px-1.5 py-0.5 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 rounded text-[9px] font-medium uppercase tracking-wider">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                  {item.ioc && (
-                    <div className="flex flex-wrap gap-1">
-                      {item.ioc.split(', ').map((c: string) => (
-                        <span key={c} className="px-1.5 py-0.5 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 rounded text-[9px] font-medium uppercase tracking-wider">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                  {item.boc && (
-                    <div className="flex flex-wrap gap-1">
-                      {item.boc.split(', ').map((c: string) => (
-                        <span key={c} className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-300 rounded text-[9px] font-medium uppercase tracking-wider">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                  {item.eoc && (
-                    <div className="flex flex-wrap gap-1">
-                      {item.eoc.split(', ').map((c: string) => (
-                        <span key={c} className="px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 rounded text-[9px] font-medium uppercase tracking-wider">{c}</span>
-                      ))}
-                    </div>
-                  )}
-                  {item.aliasHost && (
-                    <div className="text-[10px] text-gray-500 truncate" title={item.aliasHost}>
-                      <span className="font-semibold">Host:</span> {item.aliasHost}
-                    </div>
-                  )}
-                  {item.time > 0 && (
-                    <div className="text-[10px] text-gray-500 truncate" title={formatDate(item.time)}>
-                      <span className="font-semibold">Time:</span> {formatDate(item.time)}
-                    </div>
-                  )}
-                </div>
-
-                <div className="text-xs font-semibold text-gray-600 dark:text-gray-300 text-right">
-                  {formatBytes(item.size)}
-                </div>
+                <option value="time">Chronological</option>
+                <option value="size">Volume</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center justify-between mb-4 shrink-0 gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                <input 
+                  type="text" 
+                  placeholder="Filter IPs, service, country..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-gray-100 dark:bg-gray-800 border-none rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-[#B63830] dark:text-gray-200 outline-none transition-shadow"
+                />
               </div>
-            )})}
-            {liveFeed.length === 0 && (
-              <div className="text-sm text-gray-500 text-center py-8">No active connections</div>
-            )}
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 py-2 px-2.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                <input 
+                  type="checkbox" 
+                  checked={showThreatsOnly}
+                  onChange={(e) => setShowThreatsOnly(e.target.checked)}
+                  className="rounded text-[#B63830] focus:ring-[#B63830] bg-white dark:bg-gray-900 border-gray-300 dark:border-gray-700"
+                />
+                Threats
+              </label>
+            </div>
+
+            <div className="space-y-2 overflow-y-auto flex-1 pr-1">
+              {liveFeed.slice(0, 100).map((item, i) => (
+                <LiveFeedItem 
+                  key={`${item.link.id || i}`} 
+                  item={item} 
+                  isSelected={selectedItem === item.link} 
+                  onClick={handleFeedItemClick} 
+                />
+              ))}
+              {liveFeed.length === 0 && (
+                <div className="text-sm text-gray-500 text-center py-8">No active connections</div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Hover Tooltip */}
+      {/* Hover Tooltip Render */}
       <div 
         ref={tooltipRef}
         className={`fixed left-0 top-0 z-50 pointer-events-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-xl rounded-lg p-3 text-sm transition-opacity duration-200 ${hoveredItemNode ? 'opacity-100' : 'opacity-0'}`}
-        style={{ 
-          maxWidth: '300px',
-          willChange: 'transform, opacity'
-        }}
+        style={{ maxWidth: '300px', willChange: 'transform, opacity' }}
       >
-        {lastHoveredItemNode && (
-          ('source' in lastHoveredItemNode) ? (
-            // Link Tooltip
-            <div className="space-y-2">
-              <div className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-1 mb-1">
-                Connection Details
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Source:</span>
-                <span className="font-mono text-right truncate">{(lastHoveredItemNode.source as any).id || lastHoveredItemNode.source}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Target:</span>
-                <span className="font-mono text-right truncate">{(lastHoveredItemNode.target as any).id || lastHoveredItemNode.target}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Sessions:</span>
-                <span className="font-semibold">{lastHoveredItemNode.count}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Size:</span>
-                <span className="font-semibold">{formatBytes(lastHoveredItemNode.size || 0)}</span>
-              </div>
+        {lastHoveredItemNode && isLinkItem(lastHoveredItemNode) && (
+          <div className="space-y-2">
+            <div className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-1 mb-1">
+              Connection Details
             </div>
-          ) : (
-            // Node Tooltip
-            <div className="space-y-2">
-              <div className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-1 mb-1 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: lastHoveredItemNode.networkType === 'public' ? '#BE3B37' : (lastHoveredItemNode.networkType === 'internal' ? (isDark ? '#0ea5e9' : '#3b82f6') : '#64748b') }}></div>
-                <span className="font-mono truncate">{lastHoveredItemNode.id}</span>
-              </div>
-              
-              <div className="flex justify-between gap-4">
-                <span className="text-gray-500 dark:text-gray-400">Network:</span>
-                <span className="font-semibold capitalize">{lastHoveredItemNode.networkType}</span>
-              </div>
-              {lastHoveredItemNode.country && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-gray-500 dark:text-gray-400">Country:</span>
-                  <span className="font-semibold">{lastHoveredItemNode.country}</span>
-                </div>
-              )}
-              {lastHoveredItemNode.org && (
-                <div className="flex justify-between gap-4">
-                  <span className="text-gray-500 dark:text-gray-400">Org:</span>
-                  <span className="font-semibold truncate max-w-[150px]">{lastHoveredItemNode.org}</span>
-                </div>
-              )}
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500 dark:text-gray-400">Source:</span>
+              <span className="font-mono text-right truncate">{(lastHoveredItemNode.source as Node).id || lastHoveredItemNode.source}</span>
             </div>
-          )
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500 dark:text-gray-400">Target:</span>
+              <span className="font-mono text-right truncate">{(lastHoveredItemNode.target as Node).id || lastHoveredItemNode.target}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500 dark:text-gray-400">Sessions:</span>
+              <span className="font-semibold">{lastHoveredItemNode.sessions?.length || lastHoveredItemNode.count || 0}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500 dark:text-gray-400">Size:</span>
+              <span className="font-semibold">{formatBytes(lastHoveredItemNode.size || 0)}</span>
+            </div>
+          </div>
+        )}
+
+        {lastHoveredItemNode && isNodeItem(lastHoveredItemNode) && (
+          <div className="space-y-2">
+            <div className="font-semibold text-gray-800 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700 pb-1 mb-1 flex items-center gap-2">
+              <div 
+                className="w-2 h-2 rounded-full" 
+                style={{ backgroundColor: lastHoveredItemNode.networkType === 'public' ? '#B63830' : (lastHoveredItemNode.networkType === 'internal' ? (isDark ? '#0ea5e9' : '#3b82f6') : '#64748b') }} 
+              />
+              <span className="font-mono truncate">{lastHoveredItemNode.id}</span>
+            </div>
+            <div className="flex justify-between gap-4">
+              <span className="text-gray-500 dark:text-gray-400">Network:</span>
+              <span className="font-semibold capitalize">{lastHoveredItemNode.networkType}</span>
+            </div>
+            {lastHoveredItemNode.country && (
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500 dark:text-gray-400">Country:</span>
+                <span className="font-semibold">{lastHoveredItemNode.country}</span>
+              </div>
+            )}
+            {lastHoveredItemNode.org && (
+              <div className="flex justify-between gap-4">
+                <span className="text-gray-500 dark:text-gray-400">Org:</span>
+                <span className="font-semibold truncate max-w-[150px]">{lastHoveredItemNode.org}</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

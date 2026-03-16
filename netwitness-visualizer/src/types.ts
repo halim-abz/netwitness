@@ -56,3 +56,26 @@ export interface GraphData {
   nodes: Node[];
   links: Link[];
 }
+
+export interface RssSource {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  isCustom: boolean;
+  category?: string;
+}
+
+export interface Article {
+  id: string;
+  title: string;
+  link: string;
+  pubDate: string;
+  content: string;
+  contentSnippet: string;
+  sourceId: string;
+  sourceName: string;
+  types: ('breach' | 'vulnerability' | 'apt' | 'ransomware' | 'malware' | 'general')[];
+  countries: string[];
+  isNew: boolean;
+}

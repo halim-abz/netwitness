@@ -1,0 +1,177 @@
+[
+  {
+    "id": "bitdefender-labs",
+    "name": "Bitdefender Labs",
+    "url": "https://www.bitdefender.com/nuxt/api/en-us/rss/labs/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "bleepingcomputer",
+    "name": "BleepingComputer",
+    "url": "https://www.bleepingcomputer.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "cisa-alerts",
+    "name": "CISA Alerts",
+    "url": "https://www.cisa.gov/cybersecurity-advisories/all.xml",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "cisa-ics",
+    "name": "CISA ICS",
+    "url": "https://www.cisa.gov/cybersecurity-advisories/ics-advisories.xml",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "cyber-insider",
+    "name": "Cyber Insider",
+    "url": "https://cyberinsider.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "cyberscoop",
+    "name": "CyberScoop",
+    "url": "https://cyberscoop.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "cyble",
+    "name": "Cyble",
+    "url": "https://cyble.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "dark-reading",
+    "name": "Dark Reading",
+    "url": "https://www.darkreading.com/rss.xml",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "esecurity-planet",
+    "name": "eSecurity Planet",
+    "url": "https://www.esecurityplanet.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "help-net-security",
+    "name": "Help Net Security",
+    "url": "https://www.helpnetsecurity.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "huntress",
+    "name": "Huntress",
+    "url": "https://www.huntress.com/blog/rss.xml",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "infoblox",
+    "name": "Infoblox",
+    "url": "https://infosec.exchange/@InfobloxThreatIntel.rss",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "infosecurity-magazine",
+    "name": "Infosecurity Magazine",
+    "url": "https://www.infosecurity-magazine.com/rss/news/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "krebs-on-security",
+    "name": "Krebs on Security",
+    "url": "https://krebsonsecurity.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "malwarebytes-labs",
+    "name": "Malwarebytes Labs",
+    "url": "https://www.malwarebytes.com/blog/feed/index.xml",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "microsoft-security-blog",
+    "name": "Microsoft Security Blog",
+    "url": "https://www.microsoft.com/en-us/security/blog/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "polyswarm",
+    "name": "PolySwarm",
+    "url": "https://blog.polyswarm.io/rss.xml",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "proofpoint",
+    "name": "Proofpoint",
+    "url": "https://www.proofpoint.com/us/rss.xml",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "securelist",
+    "name": "SecureList",
+    "url": "https://securelist.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "securityweek",
+    "name": "SecurityWeek",
+    "url": "https://www.securityweek.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "talos-intelligence",
+    "name": "Talos Intelligence Blog",
+    "url": "https://blog.talosintelligence.com/rss/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "the-hacker-news",
+    "name": "The Hacker News",
+    "url": "https://thehackernews.com/feeds/posts/default",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "the-register",
+    "name": "The Register",
+    "url": "https://www.theregister.com/security/headlines.atom",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "unit-42",
+    "name": "Unit 42",
+    "url": "https://unit42.paloaltonetworks.com/feed/",
+    "enabled": true,
+    "isCustom": false
+  },
+  {
+    "id": "virustotal-blog",
+    "name": "VirusTotal Blog",
+    "url": "https://blog.virustotal.com/feeds/posts/default",
+    "enabled": true,
+    "isCustom": false
+  }
+]
