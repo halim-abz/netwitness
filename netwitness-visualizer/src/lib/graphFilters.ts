@@ -1,3 +1,11 @@
+/**
+ * graphFilters.ts
+ * 
+ * This utility file handles the filtering and augmentation of graph data for the 2D network graph.
+ * It implements complex filtering logic for IP addresses and attributes, and generates
+ * "attribute nodes" to visualize relationships between IPs and their metadata.
+ */
+
 import { GraphData, Node, Link } from "../types";
 
 export interface GraphAugmentationResult {
@@ -5,6 +13,194 @@ export interface GraphAugmentationResult {
   augmentedLinks: Link[];
   nodeDegree: Map<string, number>;
   adjacencyMap: Map<string, Set<string>>;
+}
+
+interface ParsedFilter {
+  textToMatch: string;
+  isExclude: boolean;
+}
+
+const GRAPH_CONSTANTS = {
+  NETWORK_INTERNAL: "internal",
+  NETWORK_PUBLIC: "public",
+  ATTR_INTERNAL_IP: "Internal IP",
+  ATTR_PUBLIC_IP: "Public IP",
+  ATTR_SERVICE: "service",
+  LINK_TYPE_TRAFFIC: "traffic",
+  LINK_TYPE_ATTRIBUTE: "attribute",
+  NODE_TYPE_ATTRIBUTE: "attribute",
+} as const;
+
+/**
+ * Safely extracts a node ID from a link source or target, handling both
+ * string IDs and hydrated node objects.
+ */
+function getNodeId(sourceOrTarget: string | number | { id: string }): string {
+  if (typeof sourceOrTarget === "object" && sourceOrTarget !== null && "id" in sourceOrTarget) {
+    return String(sourceOrTarget.id);
+  }
+  return String(sourceOrTarget);
+}
+
+/**
+ * Maps standard attributes to their respective multi-field data keys.
+ */
+function getAttributeKeys(attr: string): string[] {
+  switch (attr) {
+    case "country":
+      return ["country", "country.src", "country.dst"];
+    case "org":
+      return ["org", "org.src", "org.dst"];
+    default:
+      return [attr];
+  }
+}
+
+/**
+ * Pre-processes filters to avoid repetitive string manipulation in loops.
+ */
+function parseFilters(attributeFilters: Record<string, string>): Map<string, ParsedFilter> {
+  const parsed = new Map<string, ParsedFilter>();
+  for (const [key, value] of Object.entries(attributeFilters)) {
+    if (!value?.trim()) continue;
+    
+    const isExclude = value.startsWith("!");
+    const textToMatch = isExclude ? value.slice(1).toLowerCase() : value.toLowerCase();
+    
+    if (textToMatch) {
+      parsed.set(key, { textToMatch, isExclude });
+    }
+  }
+  return parsed;
+}
+
+/**
+ * Checks if a specific value matches the parsed filter rule.
+ */
+function matchesFilterRule(value: string, rule: ParsedFilter): boolean {
+  const includes = value.toLowerCase().includes(rule.textToMatch);
+  return rule.isExclude ? !includes : includes;
+}
+
+/**
+ * Filters nodes based on IP and standard attribute filters.
+ */
+function filterNodes(
+  nodes: Node[],
+  parsedFilters: Map<string, ParsedFilter>,
+  displayedAttributes: string[]
+): Node[] {
+  if (parsedFilters.size === 0) return nodes;
+
+  const internalIpFilter = parsedFilters.get(GRAPH_CONSTANTS.ATTR_INTERNAL_IP);
+  const publicIpFilter = parsedFilters.get(GRAPH_CONSTANTS.ATTR_PUBLIC_IP);
+
+  return nodes.filter((node) => {
+    // Check Network Type Filters
+    if (internalIpFilter && node.networkType === GRAPH_CONSTANTS.NETWORK_INTERNAL) {
+      if (!matchesFilterRule(String(node.id), internalIpFilter)) return false;
+    }
+    
+    if (publicIpFilter && node.networkType === GRAPH_CONSTANTS.NETWORK_PUBLIC) {
+      if (!matchesFilterRule(String(node.id), publicIpFilter)) return false;
+    }
+
+    // Check Displayed Attribute Filters
+    for (const [attr, rule] of parsedFilters.entries()) {
+      if (attr === GRAPH_CONSTANTS.ATTR_INTERNAL_IP || attr === GRAPH_CONSTANTS.ATTR_PUBLIC_IP) {
+        continue; // Already handled above
+      }
+      if (!displayedAttributes.includes(attr)) continue;
+
+      const keysToCheck = getAttributeKeys(attr);
+      let hasMatch = false;
+
+      for (const key of keysToCheck) {
+        const attributeValues = node.attributes?.[key];
+        if (Array.isArray(attributeValues)) {
+          if (attributeValues.some((val) => String(val).toLowerCase().includes(rule.textToMatch))) {
+            hasMatch = true;
+            break;
+          }
+        }
+      }
+
+      if (rule.isExclude ? hasMatch : !hasMatch) return false;
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Generates attribute nodes and connects them to the relevant data nodes.
+ */
+function augmentGraphData(
+  nodes: Node[],
+  links: Link[],
+  displayedAttributes: string[]
+): { augmentedNodes: Node[]; augmentedLinks: Link[] } {
+  const finalNodes = nodes.map((n) => ({ ...n }));
+  const finalLinks: Link[] = links.map((l) => ({ ...l, type: GRAPH_CONSTANTS.LINK_TYPE_TRAFFIC }));
+  const attributeNodesMap = new Set<string>();
+
+  nodes.forEach((node) => {
+    displayedAttributes.forEach((attr) => {
+      if (attr === GRAPH_CONSTANTS.ATTR_SERVICE) return;
+
+      const keysToCheck = getAttributeKeys(attr);
+      keysToCheck.forEach((key) => {
+        const attributeValues = node.attributes?.[key];
+        if (!Array.isArray(attributeValues)) return;
+
+        attributeValues.forEach((val) => {
+          const subNodeId = `attr-${attr}-${val}`;
+          
+          if (!attributeNodesMap.has(subNodeId)) {
+            attributeNodesMap.add(subNodeId);
+            finalNodes.push({
+              id: subNodeId,
+              type: GRAPH_CONSTANTS.NODE_TYPE_ATTRIBUTE,
+              attrType: attr,
+              attrValue: val,
+            } as Node);
+          }
+
+          finalLinks.push({
+            source: node.id,
+            target: subNodeId,
+            type: GRAPH_CONSTANTS.LINK_TYPE_ATTRIBUTE,
+          } as Link);
+        });
+      });
+    });
+  });
+
+  return { augmentedNodes: finalNodes, augmentedLinks: finalLinks };
+}
+
+/**
+ * Calculates degrees and builds the adjacency matrix for the graph.
+ */
+function buildGraphMetrics(links: Link[]): { degreeMap: Map<string, number>; adjMap: Map<string, Set<string>> } {
+  const degreeMap = new Map<string, number>();
+  const adjMap = new Map<string, Set<string>>();
+
+  links.forEach((l) => {
+    const sId = getNodeId(l.source);
+    const tId = getNodeId(l.target);
+
+    degreeMap.set(sId, (degreeMap.get(sId) || 0) + 1);
+    degreeMap.set(tId, (degreeMap.get(tId) || 0) + 1);
+
+    if (!adjMap.has(sId)) adjMap.set(sId, new Set());
+    if (!adjMap.has(tId)) adjMap.set(tId, new Set());
+    
+    adjMap.get(sId)!.add(tId);
+    adjMap.get(tId)!.add(sId);
+  });
+
+  return { degreeMap, adjMap };
 }
 
 /**
@@ -19,138 +215,47 @@ export function filterAndAugmentGraph(
   displayedAttributes: string[],
   attributeFilters: Record<string, string>
 ): GraphAugmentationResult {
-  if (!data.nodes.length) {
-    return {
-      augmentedNodes: [],
-      augmentedLinks: [],
-      nodeDegree: new Map<string, number>(),
-      adjacencyMap: new Map<string, Set<string>>(),
-    };
-  }
+  const emptyResult: GraphAugmentationResult = {
+    augmentedNodes: [],
+    augmentedLinks: [],
+    nodeDegree: new Map(),
+    adjacencyMap: new Map(),
+  };
 
-  // 1. Filter nodes based on attributeFilters
-  const filteredNodes = data.nodes.filter((node) => {
-    const checkFilter = (value: string, filterText: string) => {
-      if (!filterText) return true;
-      const isExclude = filterText.startsWith("!");
-      const textToMatch = isExclude ? filterText.slice(1).toLowerCase() : filterText.toLowerCase();
-      if (!textToMatch) return true;
-      const includes = value.toLowerCase().includes(textToMatch);
-      return isExclude ? !includes : includes;
-    };
+  if (!data?.nodes?.length) return emptyResult;
 
-    if (attributeFilters["Internal IP"]) {
-      if (node.networkType === "internal" && !checkFilter(node.id, attributeFilters["Internal IP"])) {
-        return false;
-      }
-    }
-    if (attributeFilters["Public IP"]) {
-      if (node.networkType === "public" && !checkFilter(node.id, attributeFilters["Public IP"])) {
-        return false;
-      }
-    }
+  const parsedFilters = parseFilters(attributeFilters);
+  const hasIpFilters = parsedFilters.has(GRAPH_CONSTANTS.ATTR_INTERNAL_IP) || parsedFilters.has(GRAPH_CONSTANTS.ATTR_PUBLIC_IP);
 
-    for (const [attr, filterText] of Object.entries(attributeFilters)) {
-      if (attr === "Internal IP" || attr === "Public IP") continue;
-      if (!filterText || !displayedAttributes.includes(attr)) continue;
-
-      const isExclude = filterText.startsWith("!");
-      const textToMatch = isExclude ? filterText.slice(1).toLowerCase() : filterText.toLowerCase();
-      if (!textToMatch) continue;
-
-      const keysToCheck = attr === "country" ? ["country", "country.src", "country.dst"] : attr === "org" ? ["org", "org.src", "org.dst"] : [attr];
-      let matches = false;
-      for (const key of keysToCheck) {
-        if (node.attributes && node.attributes[key]) {
-          if (node.attributes[key].some((val) => String(val).toLowerCase().includes(textToMatch))) {
-            matches = true;
-            break;
-          }
-        }
-      }
-
-      if (isExclude) {
-        if (matches) return false;
-      } else {
-        if (!matches) return false;
-      }
-    }
-    return true;
-  });
-
-  // 2. Filter links
+  // 1. Filter Nodes
+  let filteredNodes = filterNodes(data.nodes, parsedFilters, displayedAttributes);
   const filteredNodeIds = new Set(filteredNodes.map((n) => n.id));
+
+  // 2. Filter Links
   const filteredLinks = data.links.filter((l) => {
-    const sId = typeof l.source === "object" ? (l.source as any).id : l.source;
-    const tId = typeof l.target === "object" ? (l.target as any).id : l.target;
-    return filteredNodeIds.has(sId) && filteredNodeIds.has(tId);
+    return filteredNodeIds.has(getNodeId(l.source)) && filteredNodeIds.has(getNodeId(l.target));
   });
 
-  // 3. Handle IP connectivity filtering
-  const hasIpFilters = attributeFilters["Internal IP"]?.trim() || attributeFilters["Public IP"]?.trim();
-  const connectedNodeIds = new Set<string>();
+  // 3. Enforce IP Connectivity (Orphans removal)
   if (hasIpFilters) {
+    const connectedNodeIds = new Set<string>();
     filteredLinks.forEach((l) => {
-      const sId = typeof l.source === "object" ? (l.source as any).id : l.source;
-      const tId = typeof l.target === "object" ? (l.target as any).id : l.target;
-      connectedNodeIds.add(sId);
-      connectedNodeIds.add(tId);
+      connectedNodeIds.add(getNodeId(l.source));
+      connectedNodeIds.add(getNodeId(l.target));
     });
+    filteredNodes = filteredNodes.filter((n) => connectedNodeIds.has(String(n.id)));
   }
 
-  const finalFilteredNodes = hasIpFilters ? filteredNodes.filter((n) => connectedNodeIds.has(n.id)) : filteredNodes;
+  // 4. Augment Graph Data
+  const { augmentedNodes, augmentedLinks } = augmentGraphData(filteredNodes, filteredLinks, displayedAttributes);
 
-  // 4. Augment with attribute nodes
-  const nodes: Node[] = finalFilteredNodes.map((d) => ({ ...d }));
-  const links: Link[] = filteredLinks.map((d) => ({ ...d, type: "traffic" }));
-  const attributeNodesMap = new Map<string, Node>();
+  // 5. Calculate Metrics
+  const { degreeMap, adjMap } = buildGraphMetrics(augmentedLinks);
 
-  finalFilteredNodes.forEach((node) => {
-    displayedAttributes.forEach((attr) => {
-      if (attr === "service") return;
-      const keysToCheck = attr === "country" ? ["country", "country.src", "country.dst"] : attr === "org" ? ["org", "org.src", "org.dst"] : [attr];
-
-      keysToCheck.forEach((key) => {
-        if (node.attributes && node.attributes[key]) {
-          node.attributes[key].forEach((val) => {
-            const subNodeId = `attr-${attr}-${val}`;
-            if (!attributeNodesMap.has(subNodeId)) {
-              const newAttrNode: Node = {
-                id: subNodeId,
-                type: "attribute",
-                attrType: attr,
-                attrValue: val,
-              };
-              attributeNodesMap.set(subNodeId, newAttrNode);
-              nodes.push(newAttrNode);
-            }
-            links.push({
-              source: node.id,
-              target: subNodeId,
-              type: "attribute",
-            });
-          });
-        }
-      });
-    });
-  });
-
-  // 5. Calculate node degree and adjacency map
-  const degreeMap = new Map<string, number>();
-  const adjMap = new Map<string, Set<string>>();
-
-  links.forEach((l) => {
-    const sId = typeof l.source === "object" ? (l.source as any).id : l.source;
-    const tId = typeof l.target === "object" ? (l.target as any).id : l.target;
-
-    degreeMap.set(sId, (degreeMap.get(sId) || 0) + 1);
-    degreeMap.set(tId, (degreeMap.get(tId) || 0) + 1);
-
-    if (!adjMap.has(sId)) adjMap.set(sId, new Set());
-    if (!adjMap.has(tId)) adjMap.set(tId, new Set());
-    adjMap.get(sId)!.add(tId);
-    adjMap.get(tId)!.add(sId);
-  });
-
-  return { augmentedNodes: nodes, augmentedLinks: links, nodeDegree: degreeMap, adjacencyMap: adjMap };
+  return {
+    augmentedNodes,
+    augmentedLinks,
+    nodeDegree: degreeMap,
+    adjacencyMap: adjMap,
+  };
 }

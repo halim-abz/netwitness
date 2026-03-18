@@ -1,3 +1,11 @@
+/**
+ * index.css
+ * 
+ * Global stylesheet for the application.
+ * It imports Tailwind CSS, defines custom theme colors, utility classes,
+ * animations, and global component styles (e.g., scrollbars, checkboxes).
+ */
+
 @import "tailwindcss";
 @custom-variant dark (&:where(.dark, .dark *));
 

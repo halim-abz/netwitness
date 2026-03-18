@@ -1,3 +1,15 @@
+/**
+ * GlobeView.tsx
+ * 
+ * This component provides a 3D globe visualization of network telemetry data.
+ * It uses react-globe.gl to render the globe and D3 for geographical calculations.
+ * Key features include:
+ * - Arc rendering for network flows between source and destination IPs.
+ * - Ring and point rendering for network nodes (IPs).
+ * - Live telemetry feed with filtering and sorting capabilities.
+ * - Interactive controls for rotation, zoom, and home location setting.
+ */
+
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import Globe from 'react-globe.gl';
 import * as d3 from 'd3';
@@ -51,6 +63,8 @@ interface GlobeLabelData {
 }
 
 // --- CONSTANTS ---
+
+const GlobeComponent = Globe as unknown as React.ElementType;
 
 const GLOBE_CONFIG = {
   altitude: {
@@ -341,7 +355,7 @@ export default function GlobeView({
         onWheel={() => autoRotate && setAutoRotate(false)}
       >
         {globeSize.width > 0 && (
-          <Globe
+          <GlobeComponent
             ref={globeRef}
             width={globeSize.width}
             height={globeSize.height}
@@ -356,47 +370,47 @@ export default function GlobeView({
             polygonCapColor={() => isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'}
             polygonSideColor={() => 'rgba(0, 100, 255, 0.15)'}
             polygonStrokeColor={() => isDark ? '#334155' : '#cbd5e1'}
-            onPolygonRightClick={(polygon: object, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
+            onPolygonRightClick={(polygon: object, event: MouseEvent, { lat, lng }: any) => handleRightClick(lat, lng, event)}
             
             // Arcs
             arcsData={arcsData}
-            arcColor={(arc: GlobeArcData) => {
+            arcColor={(arc: any) => {
               if (selectedItem === arc.link) return ['#bbf7d0', '#22c55e'];
               const col = arc.color as string[];
               return arc.isTrack ? [col[0] + '40', col[1] + '40'] : col;
             }}
-            arcDashLength={(arc: GlobeArcData) => selectedItem === arc.link ? 1 : 0.4}
-            arcDashGap={(arc: GlobeArcData) => selectedItem === arc.link ? 0 : 4}
-            arcDashInitialGap={(arc: GlobeArcData) => selectedItem === arc.link ? 0 : Math.random() * 5}
+            arcDashLength={(arc: any) => selectedItem === arc.link ? 1 : 0.4}
+            arcDashGap={(arc: any) => selectedItem === arc.link ? 0 : 4}
+            arcDashInitialGap={(arc: any) => selectedItem === arc.link ? 0 : Math.random() * 5}
             arcDashAnimateTime={GLOBE_CONFIG.animation.arcDashTime}
-            arcStroke={(arc: GlobeArcData) => selectedItem === arc.link ? 2 : (hoveredArc === arc.link ? 1.5 : (arc.isTrack ? 0.2 : 0.5))}
-            onArcHover={(arc: GlobeArcData | null) => {
+            arcStroke={(arc: any) => selectedItem === arc.link ? 2 : (hoveredArc === arc.link ? 1.5 : (arc.isTrack ? 0.2 : 0.5))}
+            onArcHover={(arc: any) => {
               setHoveredArc(arc?.link ?? null);
               setHoveredItemNode(arc?.link ?? null);
               if (arc) updateTooltipPosition();
             }}
-            onArcClick={(arc: GlobeArcData) => handleItemClick(arc.link)}
-            onArcRightClick={(arc: GlobeArcData, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
+            onArcClick={(arc: any) => handleItemClick(arc.link)}
+            onArcRightClick={(arc: any, event: any, { lat, lng }: any) => handleRightClick(lat, lng, event)}
             
             // Rings
             ringsData={ringsData}
-            ringColor={(ring: GlobeRingData) => checkSelectionMatch(ring.node.id) ? '#22c55e' : ring.color}
-            ringMaxRadius={(ring: GlobeRingData) => checkSelectionMatch(ring.node.id) ? GLOBE_CONFIG.radius.selectedNode : GLOBE_CONFIG.radius.defaultNode}
+            ringColor={(ring: any) => checkSelectionMatch(ring.node.id) ? '#22c55e' : ring.color}
+            ringMaxRadius={(ring: any) => checkSelectionMatch(ring.node.id) ? GLOBE_CONFIG.radius.selectedNode : GLOBE_CONFIG.radius.defaultNode}
             ringPropagationSpeed={GLOBE_CONFIG.animation.ringPropagationSpeed}
             ringRepeatPeriod={GLOBE_CONFIG.animation.ringRepeatPeriod}
             ringAltitude={GLOBE_CONFIG.altitude.ring}
-
+ 
             // Points
             pointsData={ringsData}
-            pointColor={(pt: GlobeRingData) => checkSelectionMatch(pt.node.id) ? '#22c55e' : pt.color}
-            pointAltitude={(pt: GlobeRingData) => Math.min(0.15, 0.025 + (pt.degree ?? 0) * 0.005)}
-            pointRadius={(pt: GlobeRingData) => checkSelectionMatch(pt.node.id) ? 1.0 : 0.5}
-            onPointHover={(pt: GlobeRingData | null) => {
+            pointColor={(pt: any) => checkSelectionMatch(pt.node.id) ? '#22c55e' : pt.color}
+            pointAltitude={(pt: any) => Math.min(0.15, 0.025 + (pt.degree ?? 0) * 0.005)}
+            pointRadius={(pt: any) => checkSelectionMatch(pt.node.id) ? 1.0 : 0.5}
+            onPointHover={(pt: any) => {
               setHoveredItemNode(pt?.node ?? null);
               if (pt) updateTooltipPosition();
             }}
-            onPointClick={(pt: GlobeRingData) => handleItemClick(pt.node)}
-            onPointRightClick={(pt: GlobeRingData, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
+            onPointClick={(pt: any) => handleItemClick(pt.node)}
+            onPointRightClick={(pt: any, event: any, { lat, lng }: any) => handleRightClick(lat, lng, event)}
             
             // Labels
             labelsData={labelsData}
@@ -408,11 +422,11 @@ export default function GlobeView({
             labelAltitude={GLOBE_CONFIG.altitude.label}
             labelDotRadius={GLOBE_CONFIG.radius.labelDot}
             labelResolution={2}
-            onLabelClick={(lbl: GlobeLabelData) => handleItemClick(lbl.node ?? null)}
-            onLabelRightClick={(lbl: GlobeLabelData, event: MouseEvent, { lat, lng }) => handleRightClick(lat, lng, event)}
+            onLabelClick={(lbl: any) => handleItemClick(lbl.node ?? null)}
+            onLabelRightClick={(lbl: any, event: any, { lat, lng }: any) => handleRightClick(lat, lng, event)}
             
             // Global Events
-            onGlobeRightClick={({ lat, lng }, event: MouseEvent) => handleRightClick(lat, lng, event)}
+            onGlobeRightClick={({ lat, lng }: any, event: MouseEvent) => handleRightClick(lat, lng, event)}
             onGlobeReady={() => {
               if (!selectedItem) {
                 setTimeout(() => {
@@ -455,7 +469,7 @@ export default function GlobeView({
             onClick={() => setIsLegendOpen(!isLegendOpen)}
             className="flex items-center justify-between w-full p-3 font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
           >
-            <span>Threat Level</span>
+            <span>Legend</span>
             {isLegendOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
           </button>
           {isLegendOpen && (
@@ -544,7 +558,7 @@ export default function GlobeView({
             <div className="space-y-2 overflow-y-auto flex-1 pr-1">
               {liveFeed.slice(0, 100).map((item, i) => (
                 <LiveFeedItem 
-                  key={`${item.link.id || i}`} 
+                  key={`${i}`} 
                   item={item} 
                   isSelected={selectedItem === item.link} 
                   onClick={handleFeedItemClick} 
@@ -571,11 +585,11 @@ export default function GlobeView({
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-gray-500 dark:text-gray-400">Source:</span>
-              <span className="font-mono text-right truncate">{(lastHoveredItemNode.source as Node).id || lastHoveredItemNode.source}</span>
+              <span className="font-mono text-right truncate">{typeof lastHoveredItemNode.source === 'object' ? (lastHoveredItemNode.source as Node).id : lastHoveredItemNode.source as string}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-gray-500 dark:text-gray-400">Target:</span>
-              <span className="font-mono text-right truncate">{(lastHoveredItemNode.target as Node).id || lastHoveredItemNode.target}</span>
+              <span className="font-mono text-right truncate">{typeof lastHoveredItemNode.target === 'object' ? (lastHoveredItemNode.target as Node).id : lastHoveredItemNode.target as string}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-gray-500 dark:text-gray-400">Sessions:</span>

@@ -1,3 +1,9 @@
+/**
+ * ThreatNews.tsx
+ * * This component provides a global situational awareness view by aggregating
+ * security news from various RSS feeds and mapping them to a 3D globe.
+ */
+
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Globe from 'react-globe.gl';
@@ -20,24 +26,87 @@ interface ThreatNewsProps {
   isDark: boolean;
   isSidebarOpen: boolean;
   onClose?: () => void;
-  homeLocation?: {lat: number, lng: number} | null;
+  homeLocation?: { lat: number; lng: number } | null;
 }
 
 interface RssItem {
   guid?: string;
   id?: string;
   link?: string;
-  title?: string;
+  title?: unknown; 
   pubDate?: string;
-  'content:encoded'?: string;
-  content?: string;
-  description?: string;
+  'content:encoded'?: unknown;
+  content?: unknown;
+  description?: unknown;
+}
+
+interface GeoFeature {
+  type: string;
+  properties: {
+    NAME?: string;
+    ISO_A2?: string;
+    [key: string]: unknown;
+  };
+  geometry: unknown;
+}
+
+interface RingData {
+  lat: number;
+  lng: number;
+  color: string;
+  article: Article;
+  isImpact?: boolean;
+  maxRadius?: number;
+  propagationSpeed?: number;
+}
+
+interface LabelData {
+  lat: number;
+  lng: number;
+  text: string;
+  size: number;
+  color: string;
+}
+
+interface SettingsSidebarProps {
+  sources: RssSource[];
+  setSources: React.Dispatch<React.SetStateAction<RssSource[]>>;
+  refreshInterval: number;
+  setRefreshInterval: React.Dispatch<React.SetStateAction<number>>;
+  fetchFeeds: () => Promise<void>;
+  articles: Article[];
+  onClose?: () => void;
+}
+
+interface NewsFeedPanelProps {
+  articles: Article[];
+  filteredArticles: Article[];
+  isLoading: boolean;
+  lastUpdated: Date | null;
+  searchQuery: string;
+  setSearchQuery: React.Dispatch<React.SetStateAction<string>>;
+  typeFilter: string;
+  setTypeFilter: React.Dispatch<React.SetStateAction<string>>;
+  geoFilter: string;
+  setGeoFilter: (val: string) => void;
+  fetchFeeds: () => Promise<void>;
+  isAutoRefreshPaused: boolean;
+  setIsAutoRefreshPaused: React.Dispatch<React.SetStateAction<boolean>>;
+  visibleCount: number;
+  setVisibleCount: React.Dispatch<React.SetStateAction<number>>;
+  expandedArticleId: string | null;
+  setExpandedArticleId: (id: string | null, article: Article) => void;
+  flyToCountry: (countryCode: string) => void;
 }
 
 // --- CONSTANTS & CONFIG ---
 
 const COUNTRY_INFO = COUNTRY_DATA;
 const GlobeComponent = Globe as unknown as React.ElementType; 
+
+const MAX_VISIBLE_RINGS = 100;
+const GLOBE_ALTITUDE_DEFAULT = 2.5;
+const GLOBE_ALTITUDE_ZOOMED = 1.5;
 
 const COUNTRY_ALIASES: Record<string, string[]> = {
   'US': ['USA', 'U.S.', 'U.S.A.', 'America'],
@@ -62,7 +131,6 @@ const COUNTRY_ALIASES: Record<string, string[]> = {
   'AU': ['Australia'],
 };
 
-// Pre-compiled Regexes for performance
 const COUNTRY_REGEXES = Object.entries(COUNTRY_INFO).map(([code, info]) => {
   const aliases = COUNTRY_ALIASES[code] || [];
   const allNames = [info.name, ...aliases];
@@ -81,8 +149,9 @@ const THREAT_REGEXES = {
 // --- PURE UTILITY FUNCTIONS ---
 
 const extractCountries = (text: string): string[] => {
+  if (!text) return [];
   const found = new Set<string>();
-  const normalizedText = text.toLowerCase();
+  const normalizedText = String(text).toLowerCase();
 
   COUNTRY_REGEXES.forEach(({ code, nameRegex }) => {
     if (nameRegex.test(normalizedText)) found.add(code);
@@ -92,7 +161,7 @@ const extractCountries = (text: string): string[] => {
 };
 
 const classifyType = (title: string, content: string): Article['types'] => {
-  const combinedText = `${title} ${content}`.toLowerCase();
+  const combinedText = `${title || ''} ${content || ''}`.toLowerCase();
   const types: Article['types'] = [];
   
   if (THREAT_REGEXES.apt.test(combinedText)) types.push('apt');
@@ -100,12 +169,24 @@ const classifyType = (title: string, content: string): Article['types'] => {
   if (THREAT_REGEXES.vulnerability.test(combinedText)) types.push('vulnerability');
   if (THREAT_REGEXES.ransomware.test(combinedText)) types.push('ransomware');
   if (THREAT_REGEXES.malware.test(combinedText)) types.push('malware');
+  
   if (types.length === 0) types.push('general');
   
   return types;
 };
 
+const safeExtractString = (val: unknown): string => {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object' && val !== null) {
+    const obj = val as Record<string, unknown>;
+    return String(obj['#text'] || obj['_text'] || obj.content || val);
+  }
+  return String(val);
+};
+
 // --- GLOBAL CACHE ---
+// Note: Consider moving this to a Context or external state manager in a real app to avoid SSR/Hydration issues.
 const ViewCache = {
   sources: [] as RssSource[],
   articles: [] as Article[],
@@ -127,6 +208,7 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
   const [lastUpdated, setLastUpdated] = useState<Date | null>(ViewCache.lastUpdated);
   
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState(''); 
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [geoFilter, setGeoFilter] = useState<string>('all');
   const [refreshInterval, setRefreshInterval] = useState(5);
@@ -136,9 +218,15 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
   const [visibleCount, setVisibleCount] = useState(100);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const [impactRings, setImpactRings] = useState<any[]>([]);
+  const [impactRings, setImpactRings] = useState<RingData[]>([]);
   const impactTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const countryCentroids = useMemo(() => getCountryCentroids(countries), [countries]);
+
+  // Debounce effect
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Sync state to cache
   useEffect(() => {
@@ -151,14 +239,11 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
   useEffect(() => {
     const loadSources = async () => {
       if (ViewCache.sources.length > 0) return;
-      
       try {
         const res = await fetch('/api/rss-feeds');
         const defaultSources: RssSource[] = res.ok ? await res.json() : [];
-
         const storedCustom = localStorage.getItem('nw_rss_custom_sources');
         const customSources: RssSource[] = storedCustom ? JSON.parse(storedCustom) : [];
-
         const storedDisabled = localStorage.getItem('nw_rss_disabled_defaults');
         const disabledIds: string[] = storedDisabled ? JSON.parse(storedDisabled) : [];
 
@@ -167,10 +252,11 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
           enabled: !disabledIds.includes(s.id),
           isCustom: false
         }));
-
         setSources([...processedDefaults, ...customSources]);
-      } catch (e) {
-        console.error("Failed to load RSS sources", e);
+      } catch (error) {
+        console.error("Failed to load RSS sources:", error);
+        setToastMessage("Failed to load RSS sources.");
+        setTimeout(() => setToastMessage(null), 3000);
       }
     };
     loadSources();
@@ -181,13 +267,12 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
     return () => Object.values(impactTimeoutsRef.current).forEach(clearTimeout);
   }, []);
 
-  // --- DATA FETCHING (Parallelized) ---
+  // --- DATA FETCHING ---
   const fetchFeeds = useCallback(async () => {
     if (sources.length === 0) return;
     setIsLoading(true);
     
     const activeSources = sources.filter(s => s.enabled);
-    
     const fetchPromises = activeSources.map(async (source) => {
       const res = await fetch('/api/rss', {
         method: 'POST',
@@ -200,10 +285,12 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
       const items: RssItem[] = feed.items || [];
       
       return items.slice(0, 50).map((item) => {
-        const content = item['content:encoded'] || item.content || item.description || '';
-        const title = item.title || '';
+        const title = safeExtractString(item.title) || 'Untitled Report';
+        const rawContent = item['content:encoded'] || item.content || item.description || '';
+        const content = safeExtractString(rawContent);
+        
         return {
-          id: item.guid || item.id || item.link || Math.random().toString(),
+          id: `${source.id}-${item.guid || item.id || item.link || Math.random().toString()}`,
           title,
           link: item.link || '#',
           pubDate: item.pubDate || new Date().toISOString(),
@@ -213,29 +300,39 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
           sourceName: source.name,
           types: classifyType(title, content),
           countries: extractCountries(`${title} ${content}`),
-          isNew: false
-        };
+          isNew: false,
+          // Pre-compute lowercased strings for faster search filtering later
+          _searchTitle: title.toLowerCase(),
+          _searchSource: source.name.toLowerCase(),
+          _searchSnippet: content.toLowerCase()
+        } as Article & { _searchTitle: string; _searchSource: string; _searchSnippet: string }; 
       });
     });
 
     try {
       const results = await Promise.allSettled(fetchPromises);
-      let newArticles: Article[] = [];
-      
+      let newArticles: Array<Article & { _searchTitle: string; _searchSource: string; _searchSnippet: string }> = [];
+      let allFailed = true;
+
       results.forEach(result => {
         if (result.status === 'fulfilled') {
           newArticles = [...newArticles, ...result.value];
+          allFailed = false;
         } else {
           console.warn("A feed failed to load:", result.reason);
         }
       });
+
+      if (allFailed && activeSources.length > 0) {
+        setToastMessage("All active feeds failed to update.");
+        setTimeout(() => setToastMessage(null), 3000);
+      }
 
       newArticles.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime());
 
       setArticles(prev => {
         const prevIds = new Set(prev.map(a => a.id));
         let hasNew = false;
-        
         const updated = newArticles.map(a => {
           if (!prevIds.has(a.id) && prev.length > 0) {
             hasNew = true;
@@ -250,14 +347,12 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
         }
         return updated;
       });
-      
       setLastUpdated(new Date());
     } finally {
       setIsLoading(false);
     }
   }, [sources]);
 
-  // Initial Fetch & Auto-Refresh
   useEffect(() => {
     if (articles.length === 0 && sources.length > 0) fetchFeeds();
   }, [fetchFeeds, articles.length, sources.length]);
@@ -270,67 +365,83 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
 
   // --- FILTERING ---
   const filteredArticles = useMemo(() => {
-    const searchTerms = searchQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
+    // Perform split operations ONCE per render, not inside the filter loop
+    const searchTerms = debouncedQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
     
-    return articles.filter(a => {
-      if (typeFilter !== 'all' && !a.types.includes(typeFilter as any)) return false;
+    return articles.filter((article: any) => { // Type cast internally since we added hidden properties
+      if (!article) return false;
+      const types = article.types || [];
+      const countriesList = article.countries || [];
+
+      if (typeFilter !== 'all' && !types.includes(typeFilter)) return false;
       
       if (geoFilter !== 'all') {
         if (geoFilter.startsWith('region:')) {
           const region = geoFilter.split(':')[1];
-          if (!a.countries.some(c => COUNTRY_INFO[c]?.region === region)) return false;
+          if (!countriesList.some((c: string) => COUNTRY_INFO[c]?.region === region)) return false;
         } else {
-          if (!a.countries.includes(geoFilter)) return false;
+          if (!countriesList.includes(geoFilter)) return false;
         }
       }
       
       if (searchTerms.length > 0) {
-        const title = a.title.toLowerCase();
-        const sourceName = a.sourceName.toLowerCase();
-        const snippet = a.contentSnippet.toLowerCase();
-        
         return searchTerms.every(term => {
           if (term.startsWith('!')) {
             const excludeTerm = term.slice(1);
-            return excludeTerm ? !(title.includes(excludeTerm) || sourceName.includes(excludeTerm) || snippet.includes(excludeTerm)) : true;
+            return excludeTerm 
+              ? !(article._searchTitle.includes(excludeTerm) || article._searchSource.includes(excludeTerm) || article._searchSnippet.includes(excludeTerm)) 
+              : true;
           }
-          return title.includes(term) || sourceName.includes(term) || snippet.includes(term);
+          return article._searchTitle.includes(term) || article._searchSource.includes(term) || article._searchSnippet.includes(term);
         });
       }
       return true;
     });
-  }, [articles, typeFilter, geoFilter, searchQuery]);
+  }, [articles, typeFilter, geoFilter, debouncedQuery]);
 
   // --- GLOBE RENDERING DATA ---
   const globeData = useMemo(() => {
-    const rings: any[] = [];
+    const rings: RingData[] = [];
     const oneDayMs = 24 * 60 * 60 * 1000;
     const now = Date.now();
+    let ringCount = 0; 
     
-    filteredArticles.forEach(a => {
-      const isRecent = (now - new Date(a.pubDate).getTime()) < oneDayMs;
-      if (isRecent || a.isNew) {
-        a.countries.forEach(c => {
-          const centroid = countryCentroids.get(c.toLowerCase());
-          if (centroid) {
+    for (const article of filteredArticles) {
+      if (ringCount >= MAX_VISIBLE_RINGS) break;
+
+      const isRecent = (now - new Date(article.pubDate).getTime()) < oneDayMs;
+      if (isRecent || article.isNew) {
+        (article.countries || []).forEach((countryCode: string) => {
+          const centroid = countryCentroids.get(countryCode.toLowerCase());
+          if (centroid && !isNaN(centroid.lat) && !isNaN(centroid.lng)) {
+            const types = article.types || [];
+            let ringColor = '#3b82f6'; // default blue
+            
+            if (types.includes('apt')) ringColor = '#ef4444';
+            else if (types.includes('ransomware')) ringColor = '#f97316';
+            else if (types.includes('vulnerability')) ringColor = '#eab308';
+
             rings.push({
               lat: centroid.lat,
               lng: centroid.lng,
-              color: a.types.includes('apt') ? '#ef4444' : a.types.includes('ransomware') ? '#f97316' : a.types.includes('vulnerability') ? '#eab308' : '#3b82f6',
-              article: a
+              color: ringColor,
+              article
             });
+            ringCount++;
           }
         });
       }
-    });
+    }
     return rings;
   }, [filteredArticles, countryCentroids]);
 
   const labelsData = useMemo(() => {
     if (!showLabels || !countries?.features) return [];
-    return countries.features.map((f: any) => {
-      const name = f.properties?.NAME;
+    
+    return countries.features.map((feature: GeoFeature) => {
+      const name = feature.properties?.NAME;
       if (!name) return null;
+      
       const centroid = countryCentroids.get(name.toLowerCase());
       if (!centroid) return null;
 
@@ -340,8 +451,8 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
         text: name,
         size: 0.3,
         color: isDark ? 'rgba(255,255,255,0.8)' : '#e5e7eb'
-      };
-    }).filter(Boolean);
+      } as LabelData;
+    }).filter(Boolean) as LabelData[];
   }, [countries, showLabels, isDark, countryCentroids]);
 
   // --- GLOBE ACTIONS ---
@@ -351,15 +462,16 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
     setAutoRotate(true);
     if (globeRef.current) {
       const currentPOV = globeRef.current.pointOfView();
-      globeRef.current.pointOfView({ lat: currentPOV.lat, lng: currentPOV.lng, altitude: 2.5 }, 1000);
+      globeRef.current.pointOfView({ lat: currentPOV.lat, lng: currentPOV.lng, altitude: GLOBE_ALTITUDE_DEFAULT }, 1000);
     }
   }, [globeRef, setAutoRotate]);
 
   const flyToCountry = useCallback((countryCode: string) => {
+    if (!countryCode) return;
     const centroid = countryCentroids.get(countryCode.toLowerCase());
     if (centroid && globeRef.current) {
       setAutoRotate(false);
-      globeRef.current.pointOfView({ lat: centroid.lat, lng: centroid.lng, altitude: 1.5 }, 1000);
+      globeRef.current.pointOfView({ lat: centroid.lat, lng: centroid.lng, altitude: GLOBE_ALTITUDE_ZOOMED }, 1000);
       setSelectedCountry(countryCode);
     }
   }, [countryCentroids, globeRef, setAutoRotate]);
@@ -376,13 +488,9 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
       {/* Settings Portal */}
       {isSidebarOpen && portalNode && createPortal(
         <SettingsSidebar 
-          sources={sources} 
-          setSources={setSources} 
-          refreshInterval={refreshInterval} 
-          setRefreshInterval={setRefreshInterval}
-          fetchFeeds={fetchFeeds}
-          articles={articles}
-          onClose={onClose}
+          sources={sources} setSources={setSources} 
+          refreshInterval={refreshInterval} setRefreshInterval={setRefreshInterval}
+          fetchFeeds={fetchFeeds} articles={articles} onClose={onClose}
         />, portalNode
       )}
 
@@ -400,7 +508,7 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
             
             polygonsData={countries.features}
             polygonAltitude={0.007}
-            polygonCapColor={(d: any) => {
+            polygonCapColor={(d: GeoFeature) => {
               const isoA2 = getIsoA2FromGeoJson(d.properties);
               if (selectedCountry && isoA2 && isoA2.toLowerCase() === selectedCountry.toLowerCase()) {
                 return 'rgba(182, 56, 48, 0.4)';
@@ -411,10 +519,10 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
             polygonStrokeColor={() => isDark ? '#334155' : '#cbd5e1'}
             
             ringsData={[...globeData, ...impactRings]}
-            ringColor={(d: any) => d.color}
-            ringMaxRadius={(d: any) => d.isImpact ? d.maxRadius : (d.article.isNew ? 6 : 4)}
-            ringPropagationSpeed={(d: any) => d.isImpact ? d.propagationSpeed : 2}
-            ringRepeatPeriod={(d: any) => d.isImpact ? 0 : (d.article.isNew ? 800 : 1500)}
+            ringColor={(d: RingData) => d.color}
+            ringMaxRadius={(d: RingData) => d.isImpact ? d.maxRadius : (d.article?.isNew ? 6 : 4)}
+            ringPropagationSpeed={(d: RingData) => d.isImpact ? d.propagationSpeed : 2}
+            ringRepeatPeriod={(d: RingData) => d.isImpact ? 0 : (d.article?.isNew ? 800 : 1500)}
             ringAltitude={0.021}
 
             labelsData={labelsData}
@@ -427,13 +535,13 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
             labelDotRadius={0.1}
             labelResolution={2}
 
-            onPolygonClick={(d: any) => {
+            onPolygonClick={(d: GeoFeature) => {
               const isoA2 = getIsoA2FromGeoJson(d.properties);
               if (isoA2 && COUNTRY_INFO[isoA2]) {
                 if (selectedCountry === isoA2) {
                   resetGlobeView();
                 } else {
-                  const hasArticles = articles.some(a => a.countries.includes(isoA2));
+                  const hasArticles = articles.some(article => (article.countries || []).includes(isoA2));
                   if (!hasArticles) {
                     resetGlobeView();
                     setToastMessage(`No articles found for ${COUNTRY_INFO[isoA2].name}. Resetting filter.`);
@@ -448,7 +556,7 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
             onGlobeClick={resetGlobeView}
             onGlobeReady={() => {
               setTimeout(() => {
-                const pov = { lat: homeLocation?.lat ?? 39.8283, lng: homeLocation?.lng ?? -98.5795, altitude: 2.5 };
+                const pov = { lat: homeLocation?.lat ?? 39.8283, lng: homeLocation?.lng ?? -98.5795, altitude: GLOBE_ALTITUDE_DEFAULT };
                 globeRef.current?.pointOfView(pov, 0);
                 setIsReady(true);
                 setAutoRotate(true);
@@ -473,15 +581,10 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
       </div>
 
       <NewsFeedPanel 
-        articles={articles}
-        filteredArticles={filteredArticles}
-        isLoading={isLoading}
-        lastUpdated={lastUpdated}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        typeFilter={typeFilter}
-        setTypeFilter={setTypeFilter}
-        geoFilter={geoFilter}
+        articles={articles} filteredArticles={filteredArticles} isLoading={isLoading} lastUpdated={lastUpdated}
+        searchQuery={searchQuery} setSearchQuery={setSearchQuery} 
+        typeFilter={typeFilter} setTypeFilter={setTypeFilter}
+        geoFilter={geoFilter} 
         setGeoFilter={(val: string) => {
           if (val === 'all') resetGlobeView();
           else {
@@ -490,15 +593,12 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
             else setSelectedCountry(null);
           }
         }}
-        fetchFeeds={fetchFeeds}
-        isAutoRefreshPaused={isAutoRefreshPaused}
-        setIsAutoRefreshPaused={setIsAutoRefreshPaused}
-        visibleCount={visibleCount}
-        setVisibleCount={setVisibleCount}
+        fetchFeeds={fetchFeeds} isAutoRefreshPaused={isAutoRefreshPaused} setIsAutoRefreshPaused={setIsAutoRefreshPaused}
+        visibleCount={visibleCount} setVisibleCount={setVisibleCount}
         expandedArticleId={expandedArticleId}
         setExpandedArticleId={(id: string | null, article: Article) => {
           setExpandedArticleId(id);
-          if (id && article?.countries.length) flyToCountry(article.countries[0]);
+          if (id && article?.countries?.length) flyToCountry(article.countries[0]);
           else resetGlobeView();
         }}
         flyToCountry={flyToCountry}
@@ -509,14 +609,16 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
 
 // --- SUB-COMPONENTS ---
 
-function SettingsSidebar({ sources, setSources, refreshInterval, setRefreshInterval, fetchFeeds, articles, onClose }: any) {
+function SettingsSidebar({ sources, setSources, refreshInterval, setRefreshInterval, fetchFeeds, articles, onClose }: SettingsSidebarProps) {
   const [newFeedName, setNewFeedName] = useState('');
   const [newFeedUrl, setNewFeedUrl] = useState('');
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
   const sourceArticleCounts = useMemo(() => {
-    return articles.reduce((acc: any, a: any) => {
-      acc[a.sourceId] = (acc[a.sourceId] || 0) + 1;
+    return articles.reduce<Record<string, number>>((acc, article) => {
+      if (article.sourceId) {
+        acc[article.sourceId] = (acc[article.sourceId] || 0) + 1;
+      }
       return acc;
     }, {});
   }, [articles]);
@@ -534,9 +636,9 @@ function SettingsSidebar({ sources, setSources, refreshInterval, setRefreshInter
   };
 
   const removeCustomFeed = (id: string) => {
-    const newSources = sources.filter((s: RssSource) => s.id !== id);
+    const newSources = sources.filter(s => s.id !== id);
     setSources(newSources);
-    localStorage.setItem('nw_rss_custom_sources', JSON.stringify(newSources.filter((s: RssSource) => s.isCustom)));
+    localStorage.setItem('nw_rss_custom_sources', JSON.stringify(newSources.filter(s => s.isCustom)));
   };
 
   return (
@@ -571,8 +673,8 @@ function SettingsSidebar({ sources, setSources, refreshInterval, setRefreshInter
           <h3 className="text-sm font-bold uppercase text-gray-500 dark:text-gray-400 mb-3">Sources</h3>
           <div className="space-y-4">
             {Object.entries({
-              'Default Sources': sources.filter((s: RssSource) => !s.isCustom),
-              'Custom Sources': sources.filter((s: RssSource) => s.isCustom)
+              'Default Sources': sources.filter(s => !s.isCustom),
+              'Custom Sources': sources.filter(s => s.isCustom)
             }).map(([category, catSources]) => {
               if (catSources.length === 0 && category === 'Custom Sources') return null;
               const isCollapsed = collapsedCategories.has(category);
@@ -590,19 +692,20 @@ function SettingsSidebar({ sources, setSources, refreshInterval, setRefreshInter
                     <span>{category}</span>
                     <span className="text-[8px]">{isCollapsed ? '▶' : '▼'}</span>
                   </button>
-                  {!isCollapsed && catSources.map((source: RssSource) => (
+                  {!isCollapsed && catSources.map(source => (
                     <div key={source.id} className="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700">
+                      
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div 
                           onClick={() => {
                             const isEnabling = !source.enabled;
-                            const newSources = sources.map((s: RssSource) => s.id === source.id ? { ...s, enabled: isEnabling } : s);
+                            const newSources = sources.map(s => s.id === source.id ? { ...s, enabled: isEnabling } : s);
                             setSources(newSources);
                             
                             if (source.isCustom) {
-                              localStorage.setItem('nw_rss_custom_sources', JSON.stringify(newSources.filter((s: RssSource) => s.isCustom)));
+                              localStorage.setItem('nw_rss_custom_sources', JSON.stringify(newSources.filter(s => s.isCustom)));
                             } else {
-                              const disabledIds = newSources.filter((s: RssSource) => !s.isCustom && !s.enabled).map((s: RssSource) => s.id);
+                              const disabledIds = newSources.filter(s => !s.isCustom && !s.enabled).map(s => s.id);
                               localStorage.setItem('nw_rss_disabled_defaults', JSON.stringify(disabledIds));
                             }
                             if (isEnabling) fetchFeeds();
@@ -613,22 +716,26 @@ function SettingsSidebar({ sources, setSources, refreshInterval, setRefreshInter
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{source.name}</div>
-                          {sourceArticleCounts[source.id] > 0 && (
-                            <div className="text-[10px] text-gray-500 dark:text-gray-400">
-                              {sourceArticleCounts[source.id]} articles
-                            </div>
-                          )}
                         </div>
                       </div>
-                      {source.isCustom && (
-                        <button 
-                          onClick={() => removeCustomFeed(source.id)}
-                          className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md shrink-0 ml-2"
-                          title="Remove custom feed"
-                        >
-                          &times;
-                        </button>
-                      )}
+                      
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {sourceArticleCounts[source.id] > 0 && (
+                          <span className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium" title={`${sourceArticleCounts[source.id]} articles`}>
+                            {sourceArticleCounts[source.id]}
+                          </span>
+                        )}
+                        {source.isCustom && (
+                          <button 
+                            onClick={() => removeCustomFeed(source.id)}
+                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md shrink-0"
+                            title="Remove custom feed"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                      
                     </div>
                   ))}
                 </div>
@@ -666,7 +773,7 @@ function NewsFeedPanel({
   typeFilter, setTypeFilter, geoFilter, setGeoFilter, fetchFeeds, isAutoRefreshPaused, 
   setIsAutoRefreshPaused, visibleCount, setVisibleCount, expandedArticleId, setExpandedArticleId,
   flyToCountry
-}: any) {
+}: NewsFeedPanelProps) {
   
   const getTypeIcon = (type: string) => {
     switch(type) {
@@ -677,23 +784,28 @@ function NewsFeedPanel({
       case 'vulnerability': 
         return <ShieldOff size={14} className="text-yellow-500" />;
       case 'breach': 
-        return <Database size={14} className="text-blue-500" />;
+        return <Database size={14} className="text-purple-500" />;
       case 'malware': 
-        return <Bug size={14} className="text-purple-500" />;
+        return <Bug size={14} className="text-pink-500" />;
       default: 
-        return <Activity size={14} className="text-green-500" />;
+        return <Activity size={14} className="text-blue-500" />;
     }
   };
 
   const { availableCountries, availableRegions } = useMemo(() => {
-    const c = new Set<string>(); const r = new Set<string>();
-    articles.forEach((a: any) => a.countries.forEach((country: string) => {
-      c.add(country);
-      if (COUNTRY_INFO[country]?.region) r.add(COUNTRY_INFO[country].region);
-    }));
+    const countriesSet = new Set<string>(); 
+    const regionsSet = new Set<string>();
+    
+    articles.forEach(article => {
+      (article.countries || []).forEach(country => {
+        countriesSet.add(country);
+        if (COUNTRY_INFO[country]?.region) regionsSet.add(COUNTRY_INFO[country].region);
+      });
+    });
+    
     return {
-      availableCountries: Array.from(c).sort((a, b) => (COUNTRY_INFO[a]?.name || a).localeCompare(COUNTRY_INFO[b]?.name || b)),
-      availableRegions: Array.from(r).sort()
+      availableCountries: Array.from(countriesSet).sort((a, b) => (COUNTRY_INFO[a]?.name || a).localeCompare(COUNTRY_INFO[b]?.name || b)),
+      availableRegions: Array.from(regionsSet).sort()
     };
   }, [articles]);
 
@@ -777,14 +889,17 @@ function NewsFeedPanel({
         {isLoading && articles.length === 0 ? (
           <div className="flex justify-center py-8"><RefreshCw className="animate-spin text-gray-400" size={24} /></div>
         ) : filteredArticles.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 text-sm">No articles found</div>
+          <div className="text-center py-8 text-gray-500 text-sm">No articles found matching your criteria.</div>
         ) : (
           <>
-            {filteredArticles.slice(0, visibleCount).map((article: any, i: number) => {
+            {filteredArticles.slice(0, visibleCount).map((article: Article, i: number) => {
               const isExpanded = expandedArticleId === article.id;
+              const typesToRender = article.types || ['general'];
+              const countriesToRender = article.countries || [];
+
               return (
                 <div 
-                  key={article.id} 
+                  key={`${article.id}-${i}`} 
                   className={`p-3 rounded-lg border transition-all duration-200 ${article.isNew ? 'animate-in fade-in slide-in-from-right-8' : ''} ${
                     isExpanded 
                       ? 'border-[#B63830] bg-[#B63830]/5 dark:bg-[#B63830]/10' 
@@ -795,8 +910,8 @@ function NewsFeedPanel({
                   <div className="cursor-pointer" onClick={() => setExpandedArticleId(isExpanded ? null : article.id, article)}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        {getTypeIcon(article.types[0] || 'general')}
-                        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{article.sourceName}</span>
+                        {getTypeIcon(typesToRender[0] || 'general')}
+                        <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">{article.sourceName || 'Unknown Source'}</span>
                         {article.isNew && (
                           <span className="flex h-2 w-2 relative">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -811,24 +926,24 @@ function NewsFeedPanel({
                     </h3>
                     
                     <div className="flex flex-wrap gap-1 mb-2">
-                      {article.types.map((t: string) => (
+                      {typesToRender.map(threatType => (
                         <span 
-                          key={t} 
+                          key={threatType} 
                           className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 rounded text-[9px] font-medium uppercase tracking-wider"
                         >
-                          {t}
+                          {threatType}
                         </span>
                       ))}
-                      {article.countries.map((c: string) => (
+                      {countriesToRender.map(countryCode => (
                         <span 
-                          key={c} 
+                          key={countryCode} 
                           onClick={(e) => {
                             e.stopPropagation();
-                            flyToCountry(c);
+                            flyToCountry(countryCode);
                           }}
                           className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-[9px] font-medium uppercase tracking-wider hover:bg-gray-300 dark:hover:bg-gray-600 cursor-pointer"
                         >
-                          {COUNTRY_INFO[c]?.name || c}
+                          {COUNTRY_INFO[countryCode]?.name || countryCode}
                         </span>
                       ))}
                     </div>
@@ -836,7 +951,7 @@ function NewsFeedPanel({
 
                   {isExpanded && (
                     <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 line-clamp-[10]" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.contentSnippet) }}></p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mb-3 line-clamp-[10]" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(article.contentSnippet || '') }}></p>
                       <a 
                         href={article.link} 
                         target="_blank" 

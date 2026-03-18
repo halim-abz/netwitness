@@ -1,3 +1,11 @@
+/**
+ * ErrorBoundary.tsx
+ * 
+ * A React Error Boundary component that catches JavaScript errors in its child
+ * component tree and displays a fallback UI. This ensures that the application
+ * remains partially functional even if a specific component crashes.
+ */
+
 import React, { Component, ErrorInfo, ReactNode } from "react";
 
 interface Props {
@@ -16,15 +24,18 @@ export class ErrorBoundary extends React.Component<Props, State> {
   };
 
   public static getDerivedStateFromError(error: Error): State {
+    // Update state so the next render will show the fallback UI.
     return { hasError: true, error };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    // You can also log the error to an error reporting service here
     console.error("Uncaught error:", error, errorInfo);
   }
 
   public render() {
     if (this.state.hasError) {
+      // Fallback UI
       return (
         <div className="p-4 bg-red-100 text-red-900 rounded-lg m-4 w-full h-full overflow-auto">
           <h2 className="text-lg font-bold mb-2">Something went wrong.</h2>

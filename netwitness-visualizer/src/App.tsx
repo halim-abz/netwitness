@@ -1,23 +1,92 @@
+/**
+ * App.tsx
+ * 
+ * This is the main entry point for the React application. It manages the global state,
+ * including view modes (Graph, Globe, News), theme (Dark/Light), and home location.
+ * It coordinates data fetching via the useNetWitnessQuery hook and data processing
+ * via the processData utility.
+ */
+
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Sidebar from "./components/Sidebar";
 import NetworkGraph from "./components/NetworkGraph";
 import GlobeView from "./components/GlobeView";
 import ThreatNews from "./components/ThreatNews";
+import AssetsView from "./components/AssetsView";
+import AlertsDashboard from "./components/AlertsDashboard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import DetailsPanel from "./components/DetailsPanel";
 import { Node, Link } from "./types";
-import { AlertCircle, Settings, Moon, Sun, Globe, Network, Newspaper } from "lucide-react";
+import { AlertCircle, Settings, Moon, Sun, Globe, Network, Newspaper, Server, ShieldAlert } from "lucide-react";
 import { processData } from "./lib/dataProcessor";
 import { useNetWitnessQuery } from "./hooks/useNetWitnessQuery";
 
+// --- TYPES ---
+
+export interface Coordinates {
+  lat: number;
+  lng: number;
+}
+
+type ViewMode = 'graph' | 'globe' | 'news' | 'assets' | 'alerts';
+
 // --- CONSTANTS & CONFIG ---
 
-// Read environment variables once at module level for performance
 const ENV_LAT = import.meta.env.VITE_NW_HOME_LAT;
 const ENV_LNG = import.meta.env.VITE_NW_HOME_LNG;
 const ENABLE_GRAPH = import.meta.env.VITE_ENABLE_GRAPH !== 'false';
 const ENABLE_GLOBE = import.meta.env.VITE_ENABLE_GLOBE !== 'false';
 const ENABLE_NEWS = import.meta.env.VITE_ENABLE_NEWS !== 'false';
+const ENABLE_ASSETS = import.meta.env.VITE_ENABLE_ASSETS !== 'false';
+const ENABLE_ALERTS = import.meta.env.VITE_ENABLE_ALERTS !== 'false';
+const FALLBACK_NAVIGATE_URL = import.meta.env.VITE_NW_NAVIGATE_URL;
+
+const VIEW_MODES = [
+  { id: 'assets', icon: Server, label: 'Assets', enabled: ENABLE_ASSETS },
+  { id: 'graph', icon: Network, label: 'Graph', enabled: ENABLE_GRAPH },
+  { id: 'globe', icon: Globe, label: 'Globe', enabled: ENABLE_GLOBE },
+  { id: 'alerts', icon: ShieldAlert, label: 'Alerts', enabled: ENABLE_ALERTS },
+  { id: 'news', icon: Newspaper, label: 'News', enabled: ENABLE_NEWS },
+] as const;
+
+// --- INITIALIZATION HELPERS ---
+
+const getDefaultViewMode = (): ViewMode => {
+  try {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const view = params.get('view');
+      if (view === 'assets' && ENABLE_ASSETS) return 'assets';
+      if (view === 'graph' && ENABLE_GRAPH) return 'graph';
+      if (view === 'globe' && ENABLE_GLOBE) return 'globe';
+      if (view === 'alerts' && ENABLE_ALERTS) return 'alerts';
+      if (view === 'news' && ENABLE_NEWS) return 'news';
+    }
+  } catch {
+    // Ignore URL parsing errors, fallback to defaults
+  }
+  
+  if (ENABLE_ASSETS) return 'assets';
+  if (ENABLE_GRAPH) return 'graph';
+  if (ENABLE_GLOBE) return 'globe';
+  if (ENABLE_ALERTS) return 'alerts';
+  if (ENABLE_NEWS) return 'news';
+  return 'assets';
+};
+
+const getDefaultHomeLocation = (): Coordinates | null => {
+  try {
+    const stored = localStorage.getItem('nw_home_location');
+    if (stored) return JSON.parse(stored);
+  } catch {
+    // Fallback to env vars on parse failure
+  }
+  
+  if (ENV_LAT && ENV_LNG) {
+    return { lat: parseFloat(ENV_LAT), lng: parseFloat(ENV_LNG) };
+  }
+  return null;
+};
 
 /**
  * Main Application Component
@@ -30,88 +99,64 @@ export default function App() {
   // Theme and layout state
   const [isDark, setIsDark] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  
-  // View mode state (graph vs globe vs news)
-  const [viewMode, setViewMode] = useState<'graph' | 'globe' | 'news'>(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        const view = params.get('view');
-        if (view === 'globe' && ENABLE_GLOBE) return 'globe';
-        if (view === 'news' && ENABLE_NEWS) return 'news';
-        if (view === 'graph' && ENABLE_GRAPH) return 'graph';
-      }
-    } catch (e) {
-      // Ignore URL parsing errors
-    }
+  const [viewMode, setViewMode] = useState<ViewMode>(getDefaultViewMode);
+  const [homeLocation, setHomeLocation] = useState<Coordinates | null>(getDefaultHomeLocation);
+  const [alertsConfig, setAlertsConfig] = useState<{host: string, port: string, username: string, password?: string, trigger: number} | null>(() => {
+    const host = typeof window !== 'undefined' ? window.localStorage.getItem('nw_alerts_host') : null;
+    const port = typeof window !== 'undefined' ? window.localStorage.getItem('nw_alerts_port') : null;
+    const username = typeof window !== 'undefined' ? window.localStorage.getItem('nw_alerts_username') : null;
     
-    // Default priority based on enabled dashboards
-    if (ENABLE_GRAPH) return 'graph';
-    if (ENABLE_GLOBE) return 'globe';
-    if (ENABLE_NEWS) return 'news';
-    return 'graph';
-  });
-  
-  // User preferences state
-  const [homeLocation, setHomeLocation] = useState<{lat: number, lng: number} | null>(() => {
-    try {
-      const stored = localStorage.getItem('nw_home_location');
-      if (stored) return JSON.parse(stored);
-      if (ENV_LAT && ENV_LNG) return { lat: parseFloat(ENV_LAT), lng: parseFloat(ENV_LNG) };
-      return null;
-    } catch (e) {
-      if (ENV_LAT && ENV_LNG) return { lat: parseFloat(ENV_LAT), lng: parseFloat(ENV_LNG) };
-      return null;
+    // Use env vars as fallback if local storage is empty
+    const finalHost = host || import.meta.env.VITE_NW_ALERTS_HOST || '';
+    const finalPort = port || import.meta.env.VITE_NW_ALERTS_PORT || '';
+    const finalUsername = username || import.meta.env.VITE_NW_ALERTS_USERNAME || '';
+    
+    if (finalHost && finalUsername) {
+      // trigger is 0 initially so it doesn't auto-query on load
+      return { host: finalHost, port: finalPort, username: finalUsername, password: '', trigger: 0 };
     }
+    return null;
   });
 
   // Custom hook to manage data fetching and state
+  const handleQueryReset = useCallback(() => {
+    setSelectedItem(null);
+    setDisplayedAttributes(['service']);
+  }, []);
+
   const {
     rawData,
     isLoading,
     error,
     queriedAttributes,
     navigateUrl,
+    latestConfig,
     handleQuery,
     handleCancel,
     setError
-  } = useNetWitnessQuery(useCallback(() => {
-    setSelectedItem(null);
-    setDisplayedAttributes(['service']);
-  }, []));
+  } = useNetWitnessQuery(handleQueryReset);
 
-  // Apply dark mode class to document element
+  // Apply dark mode class
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', isDark);
   }, [isDark]);
 
-  // Process raw data into graph format, memoized to prevent unnecessary recalculations
+  // Process raw data into graph format
   const graphData = useMemo(() => {
-    if (rawData) {
-      return processData(rawData, homeLocation);
-    }
-    return { nodes: [], links: [] };
+    if (!rawData) return { nodes: [], links: [] };
+    return processData(rawData, homeLocation);
   }, [homeLocation, rawData]);
 
   /**
    * Handles selection of a specific attribute (e.g., a country or organization).
-   * Automatically adds the attribute to the displayed list and selects the first matching node.
    */
   const handleAttributeSelect = useCallback((attrType: string, attrValue: string) => {
-    let normalizedAttrType = attrType;
-    if (attrType === 'country.src' || attrType === 'country.dst') normalizedAttrType = 'country';
-    if (attrType === 'org.src' || attrType === 'org.dst') normalizedAttrType = 'org';
+    // Normalizes attributes like 'country.src' to 'country'
+    const normalizedAttrType = attrType.replace(/\.(src|dst)$/, '');
 
-    setDisplayedAttributes(prev => {
-      if (!prev.includes(normalizedAttrType)) {
-        return [...prev, normalizedAttrType];
-      }
-      return prev;
-    });
+    setDisplayedAttributes(prev => 
+      prev.includes(normalizedAttrType) ? prev : [...prev, normalizedAttrType]
+    );
     
     setSelectedItem({
       id: `attr-${normalizedAttrType}-${attrValue}`,
@@ -121,49 +166,71 @@ export default function App() {
     });
   }, []);
 
+  const handleSetHomeLocation = useCallback((loc: Coordinates) => {
+    setHomeLocation(loc);
+    localStorage.setItem('nw_home_location', JSON.stringify(loc));
+  }, []);
+
+  // --- REUSABLE UI ELEMENTS ---
+
+  // Pre-construct the details panel to avoid JSX duplication
+  const detailsPanelElement = selectedItem && viewMode !== 'news' && viewMode !== 'assets' && viewMode !== 'alerts' ? (
+    <DetailsPanel
+      selectedItem={selectedItem}
+      onClose={() => setSelectedItem(null)}
+      graphData={graphData}
+      onNodeSelect={setSelectedItem}
+      onAttributeSelect={handleAttributeSelect}
+      navigateUrl={navigateUrl || FALLBACK_NAVIGATE_URL}
+      viewMode={viewMode}
+    />
+  ) : null;
+
   return (
     <div className={`flex h-screen w-full bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-300 font-sans overflow-hidden transition-colors duration-200 ${isDark ? 'dark' : ''}`}>
+      
+      {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/20 dark:bg-black/40 z-30 md:hidden backdrop-blur-sm"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
+
+      {/* Sidebar */}
       {isSidebarOpen && viewMode !== 'news' && (
         <div className="absolute inset-y-0 left-0 z-40 md:relative shadow-2xl md:shadow-none">
           <Sidebar 
             onQuery={handleQuery} 
+            onAlertsQuery={(config) => setAlertsConfig({ ...config, trigger: Date.now() })}
             isLoading={isLoading} 
             onCancel={handleCancel} 
             onClose={() => setIsSidebarOpen(false)} 
             homeLocation={homeLocation}
             onHomeLocationChange={setHomeLocation}
+            viewMode={viewMode}
           />
         </div>
       )}
-      <div id="news-sidebar-portal" className={isSidebarOpen && viewMode === 'news' ? "absolute inset-y-0 left-0 z-40 md:relative shadow-2xl md:shadow-none flex" : "hidden"} />
+
+      {/* News Portal */}
+      <div 
+        id="news-sidebar-portal" 
+        className={isSidebarOpen && viewMode === 'news' ? "absolute inset-y-0 left-0 z-40 md:relative shadow-2xl md:shadow-none flex" : "hidden"} 
+      />
 
       <main className="flex-1 min-w-0 relative flex flex-col p-4">
-        {/* Top Bar */}
-        <div className="absolute top-6 left-6 z-20 flex items-center gap-2">
-          {!isSidebarOpen && (
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              title="Open Settings"
-            >
-              <Settings size={18} />
-            </button>
-          )}
-          {isSidebarOpen && (
-            <button
-              onClick={() => setIsSidebarOpen(false)}
-              className="hidden md:block p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              title="Close Settings"
-            >
-              <Settings size={18} />
-            </button>
-          )}
+        
+        {/* Top Bar Controls */}
+        <div className="flex items-center gap-2 mb-4 z-20">
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className={`p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${!isSidebarOpen ? '' : 'hidden md:block'}`}
+            title={isSidebarOpen ? "Close Settings" : "Open Settings"}
+          >
+            <Settings size={18} />
+          </button>
+          
           <button
             onClick={() => setIsDark(!isDark)}
             className="p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -171,52 +238,28 @@ export default function App() {
           >
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-          <div className="flex bg-gray-100 dark:bg-gray-800/80 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
-            {ENABLE_GRAPH && (
-              <button
-                onClick={() => setViewMode('graph')}
-                className={`px-3 py-1.5 flex items-center gap-2 text-sm font-medium transition-all rounded-md ${
-                  viewMode === 'graph'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
-                }`}
-              >
-                <Network size={16} />
-                <span>Graph</span>
-              </button>
-            )}
-            {ENABLE_GLOBE && (
-              <button
-                onClick={() => setViewMode('globe')}
-                className={`px-3 py-1.5 flex items-center gap-2 text-sm font-medium transition-all rounded-md ${
-                  viewMode === 'globe'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
-                }`}
-              >
-                <Globe size={16} />
-                <span>Globe</span>
-              </button>
-            )}
-            {ENABLE_NEWS && (
-              <button
-                onClick={() => setViewMode('news')}
-                className={`px-3 py-1.5 flex items-center gap-2 text-sm font-medium transition-all rounded-md ${
-                  viewMode === 'news'
-                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
-                }`}
-              >
-                <Newspaper size={16} />
-                <span>News</span>
-              </button>
-            )}
-          </div>
           
+          <div className="flex bg-gray-100 dark:bg-gray-800/80 p-1 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+            {VIEW_MODES.filter(mode => mode.enabled).map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                onClick={() => setViewMode(id as ViewMode)}
+                className={`px-3 py-1.5 flex items-center gap-2 text-sm font-medium transition-all rounded-md ${
+                  viewMode === id
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
+                }`}
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
+        {/* Error Banner */}
         {error && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-200 px-4 py-3 rounded-lg shadow-md flex items-center gap-3 max-w-2xl w-full backdrop-blur-sm">
+          <div className="mb-4 z-20 bg-red-50 dark:bg-red-950/80 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-200 px-4 py-3 rounded-lg shadow-md flex items-center gap-3 w-full backdrop-blur-sm">
             <AlertCircle className="shrink-0 text-red-500 dark:text-red-400" size={20} />
             <div className="flex-1">
               <h3 className="font-semibold text-sm">Query Failed</h3>
@@ -231,6 +274,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Main Content Area */}
         <div className="flex-1 relative rounded-xl border border-gray-200 dark:border-gray-800 shadow-lg bg-white dark:bg-gray-900 overflow-hidden transition-colors duration-200 flex">
           {viewMode === 'globe' ? (
             <ErrorBoundary>
@@ -240,23 +284,25 @@ export default function App() {
                 isDark={isDark}
                 selectedItem={selectedItem}
                 homeLocation={homeLocation}
-                onSetHomeLocation={(loc) => {
-                  setHomeLocation(loc);
-                  localStorage.setItem('nw_home_location', JSON.stringify(loc));
-                }}
+                onSetHomeLocation={handleSetHomeLocation}
               >
-                {selectedItem && (
-                  <DetailsPanel
-                    selectedItem={selectedItem}
-                    onClose={() => setSelectedItem(null)}
-                    graphData={graphData}
-                    onNodeSelect={setSelectedItem}
-                    onAttributeSelect={handleAttributeSelect}
-                    navigateUrl={navigateUrl || import.meta.env.VITE_NW_NAVIGATE_URL}
-                    viewMode={viewMode}
-                  />
-                )}
+                {detailsPanelElement}
               </GlobeView>
+            </ErrorBoundary>
+          ) : viewMode === 'assets' ? (
+            <ErrorBoundary>
+              <AssetsView data={graphData} isDark={isDark} />
+            </ErrorBoundary>
+          ) : viewMode === 'alerts' ? (
+            <ErrorBoundary>
+              <AlertsDashboard 
+                host={alertsConfig?.host || import.meta.env.VITE_NW_ALERTS_HOST || import.meta.env.VITE_NW_HOST || ''} 
+                port={alertsConfig?.port || import.meta.env.VITE_NW_ALERTS_PORT || import.meta.env.VITE_NW_PORT || ''}
+                username={alertsConfig?.username || import.meta.env.VITE_NW_ALERTS_USERNAME || import.meta.env.VITE_NW_USERNAME || ''} 
+                password={alertsConfig?.password || import.meta.env.VITE_NW_ALERTS_PASSWORD || import.meta.env.VITE_NW_PASSWORD || ''} 
+                isDark={isDark}
+                queryTrigger={alertsConfig?.trigger || 0}
+              />
             </ErrorBoundary>
           ) : (
             <>
@@ -282,22 +328,18 @@ export default function App() {
                   </div>
                 ) : (
                   <ErrorBoundary>
-                    <ThreatNews isDark={isDark} isSidebarOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} homeLocation={homeLocation} />
+                    <ThreatNews 
+                      isDark={isDark} 
+                      isSidebarOpen={isSidebarOpen} 
+                      onClose={() => setIsSidebarOpen(false)} 
+                      homeLocation={homeLocation} 
+                    />
                   </ErrorBoundary>
                 )}
               </div>
-
-              {viewMode !== 'news' && selectedItem && (
-                <DetailsPanel
-                  selectedItem={selectedItem}
-                  onClose={() => setSelectedItem(null)}
-                  graphData={graphData}
-                  onNodeSelect={setSelectedItem}
-                  onAttributeSelect={handleAttributeSelect}
-                  navigateUrl={navigateUrl || import.meta.env.VITE_NW_NAVIGATE_URL}
-                  viewMode={viewMode}
-                />
-              )}
+              
+              {/* Render panel alongside NetworkGraph/ThreatNews if not in globe mode */}
+              {detailsPanelElement}
             </>
           )}
         </div>
@@ -305,4 +347,3 @@ export default function App() {
     </div>
   );
 }
-

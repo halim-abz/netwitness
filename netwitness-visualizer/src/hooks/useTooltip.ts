@@ -1,3 +1,11 @@
+/**
+ * useTooltip.ts
+ * 
+ * A custom hook for managing shared tooltip logic across different visualization components.
+ * It handles hover states, mouse tracking, and direct DOM manipulation for high-performance
+ * tooltip positioning, avoiding unnecessary React re-renders.
+ */
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 
 /**

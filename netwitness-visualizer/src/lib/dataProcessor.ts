@@ -1,9 +1,7 @@
 import { GraphData, Node, Link, NetWitnessResponse, Session } from "../types";
 
 /**
- * Helper to ensure a value is treated as an array.
- * @param val - The value to wrap in an array if it isn't one already.
- * @returns An array containing the value(s).
+ * Ensures a value is treated as an array.
  */
 export const asArray = <T,>(val: T | T[] | undefined): T[] => {
   if (val === undefined) return [];
@@ -11,39 +9,70 @@ export const asArray = <T,>(val: T | T[] | undefined): T[] => {
 };
 
 /**
- * Helper to get the first element of a value that might be an array.
- * @param val - The value to extract the first element from.
- * @returns The first element, or the value itself if not an array.
+ * Gets the first element of a value that might be an array.
  */
 export const firstOf = <T,>(val: T | T[] | undefined): T | undefined => {
   if (val === undefined) return undefined;
   return Array.isArray(val) ? val[0] : val;
 };
 
-/**
- * Processes raw NetWitness data into a graph-friendly format.
- * Optimized for CPU and memory by minimizing array allocations and using Map for O(1) lookups.
- * 
- * @param data - The raw response from the NetWitness API.
- * @param homeLoc - Optional home location to use for internal network nodes.
- * @returns A structured GraphData object containing nodes and links.
- */
-export const processData = (data: NetWitnessResponse, homeLoc?: {lat: number, lng: number} | null): GraphData => {
-  if (!data?.results?.fields) return { nodes: [], links: [] };
+// --- CONSTANTS & HELPERS ---
 
-  // Use Map for faster lookups and insertions compared to plain objects
+const IGNORED_ATTRIBUTE_KEYS = new Set([
+  "group", "ip.src", "ip.dst", "size", "direction",
+  "latdec.src", "latdec.dst", "longdec.src", "longdec.dst", "time"
+]);
+
+/**
+ * Determines whether a session key should be included as a node attribute.
+ */
+const shouldIncludeAttribute = (key: string, isSrc: boolean): boolean => {
+  if (IGNORED_ATTRIBUTE_KEYS.has(key)) return false;
+  if ((key.endsWith('.src') || key.endsWith('.srcport')) && !isSrc) return false;
+  if ((key.endsWith('.dst') || key.endsWith('.dstport')) && isSrc) return false;
+  if ((key === "ssl.ca" || key === "ssl.subject" || key === "server") && isSrc) return false;
+  if (key === "client" && !isSrc) return false;
+  return true;
+};
+
+/**
+ * Determines the network type based on traffic direction.
+ */
+const determineNetworkType = (dirStr: string, isSrc: boolean): 'public' | 'internal' | 'unknown' => {
+  if (dirStr === 'inbound') return isSrc ? 'public' : 'internal';
+  if (dirStr === 'outbound') return isSrc ? 'internal' : 'public';
+  if (dirStr === 'lateral') return 'internal';
+  return 'unknown';
+};
+
+// Internal builder type to safely accumulate Set data before final mapping
+type LinkBuilder = Omit<Link, 'services'> & {
+  servicesSet: Set<string>;
+};
+
+/**
+ * Processes raw NetWitness data into a structured GraphData format.
+ */
+export const processData = (
+  data: NetWitnessResponse, 
+  homeLoc?: { lat: number; lng: number } | null
+): GraphData => {
+  if (!data?.results?.fields || data.results.fields.length === 0) {
+    return { nodes: [], links: [] };
+  }
+
   const sessionsMap = new Map<number, Session>();
-  const fields = data.results.fields;
-  
-  // Group fields by session (group ID) in a single pass
-  for (let i = 0, len = fields.length; i < len; i++) {
-    const field = fields[i];
-    const g = field.group;
-    let session = sessionsMap.get(g);
+  const nodesMap = new Map<string, Node>();
+  const linksMap = new Map<string, LinkBuilder>();
+
+  // 1. Group fields by session (group ID)
+  for (const field of data.results.fields) {
+    const groupId = field.group;
+    let session = sessionsMap.get(groupId);
     
     if (!session) {
-      session = { group: g };
-      sessionsMap.set(g, session);
+      session = { group: groupId };
+      sessionsMap.set(groupId, session);
     }
     
     const existing = session[field.type];
@@ -58,116 +87,100 @@ export const processData = (data: NetWitnessResponse, homeLoc?: {lat: number, ln
     }
   }
 
-  const nodesMap = new Map<string, Node>();
-  const linksMap = new Map<string, Link>();
+  // Helper function moved outside the loop to prevent reallocation
+  const processNode = (ip: string, isSrc: boolean, session: Session, sessionKeys: string[]) => {
+    let node = nodesMap.get(ip);
+    if (!node) {
+      node = { id: ip, type: "ip", attributes: {}, networkType: "unknown" };
+      nodesMap.set(ip, node);
+    }
+    
+    const dirStr = String(firstOf(session["direction"]) || '').toLowerCase();
+    const networkType = determineNetworkType(dirStr, isSrc);
+    
+    if (networkType !== 'unknown') {
+      node.networkType = networkType;
+    }
 
-  // Process each session to build nodes and links
+    const country = firstOf(isSrc ? session["country.src"] : session["country.dst"]);
+    if (country) node.country = String(country);
+    
+    const org = firstOf(isSrc ? session["org.src"] : session["org.dst"]);
+    if (org) node.org = String(org);
+    
+    const rawNetname = session["netname"];
+    const netname = Array.isArray(rawNetname) ? rawNetname.join(", ") : rawNetname;
+    if (netname) {
+      const nnStr = String(netname);
+      if (!node.netname) {
+        node.netname = nnStr;
+      } else if (!node.netname.includes(nnStr)) {
+        node.netname += `, ${nnStr}`;
+      }
+    }
+    
+    const latRaw = firstOf(isSrc ? session["latdec.src"] : session["latdec.dst"]);
+    const lngRaw = firstOf(isSrc ? session["longdec.src"] : session["longdec.dst"]);
+    
+    if (latRaw !== undefined) {
+      const lat = parseFloat(String(latRaw));
+      if (!Number.isNaN(lat)) node.lat = lat;
+    }
+    if (lngRaw !== undefined) {
+      const lng = parseFloat(String(lngRaw));
+      if (!Number.isNaN(lng)) node.lng = lng;
+    }
+
+    // Apply home location fallback for internal non-lateral nodes
+    if (homeLoc && node.networkType === 'internal' && dirStr !== 'lateral') {
+      node.lat ??= homeLoc.lat;
+      node.lng ??= homeLoc.lng;
+    }
+
+    // Batch add dynamic attributes
+    if (!node.attributes) node.attributes = {};
+    
+    for (const key of sessionKeys) {
+      if (!shouldIncludeAttribute(key, isSrc)) continue;
+      
+      node.attributes[key] ??= [];
+      const valuesToAdd = asArray(session[key]);
+      
+      for (const val of valuesToAdd) {
+        const strVal = String(val);
+        // Specific netname suffix filtering
+        if (key === 'netname') {
+          if (strVal.endsWith(' src') && !isSrc) continue;
+          if (strVal.endsWith(' dst') && isSrc) continue;
+        }
+        
+        if (!node.attributes[key].includes(strVal)) {
+          node.attributes[key].push(strVal);
+        }
+      }
+    }
+  };
+
+  // 2. Process sessions to build nodes and links
   for (const session of sessionsMap.values()) {
-    const srcs = asArray(session["ip.src"]);
-    const dsts = asArray(session["ip.dst"]);
+    const srcs = asArray(session["ip.src"]).map(String);
+    const dsts = asArray(session["ip.dst"]).map(String);
 
     if (srcs.length === 0 && dsts.length === 0) continue;
 
-    const dirStr = String(firstOf(session["direction"]) || '').toLowerCase();
-    const cSrc = firstOf(session["country.src"]);
-    const cDst = firstOf(session["country.dst"]);
-    const oSrc = firstOf(session["org.src"]);
-    const oDst = firstOf(session["org.dst"]);
-    
-    const nnRaw = session["netname"];
-    const nn = Array.isArray(nnRaw) ? nnRaw.join(", ") : nnRaw;
-
     const sessionKeys = Object.keys(session);
 
-    // Helper to add/update node attributes
-    const updateNode = (id: string, isSrc: boolean) => {
-      let node = nodesMap.get(id);
-      if (!node) {
-        node = { id, type: "ip", attributes: {}, networkType: "unknown" };
-        nodesMap.set(id, node);
-      }
-      
-      let networkType: 'public' | 'internal' | 'unknown' = node.networkType || 'unknown';
-      if (dirStr) {
-        if (dirStr === 'inbound') {
-          networkType = isSrc ? 'public' : 'internal';
-        } else if (dirStr === 'outbound') {
-          networkType = isSrc ? 'internal' : 'public';
-        } else if (dirStr === 'lateral') {
-          networkType = 'internal';
-        }
-        node.networkType = networkType;
-      }
+    // Build Nodes
+    for (const src of srcs) processNode(src, true, session, sessionKeys);
+    for (const dst of dsts) processNode(dst, false, session, sessionKeys);
 
-      const country = isSrc ? cSrc : cDst;
-      if (country) node.country = String(country);
-      
-      const org = isSrc ? oSrc : oDst;
-      if (org) node.org = String(org);
-      
-      if (nn) {
-        const nnStr = String(nn);
-        if (!node.netname) node.netname = nnStr;
-        else if (!node.netname.includes(nnStr)) node.netname += `, ${nnStr}`;
-      }
-      
-      const lat = firstOf(isSrc ? session["latdec.src"] : session["latdec.dst"]);
-      const lng = firstOf(isSrc ? session["longdec.src"] : session["longdec.dst"]);
-      
-      if (lat) node.lat = parseFloat(String(lat));
-      if (lng) node.lng = parseFloat(String(lng));
-
-      if (homeLoc && networkType === 'internal' && dirStr !== 'lateral') {
-        if (node.lat === undefined) node.lat = homeLoc.lat;
-        if (node.lng === undefined) node.lng = homeLoc.lng;
-      }
-
-      // Batch add attributes
-      for (let k = 0; k < sessionKeys.length; k++) {
-        const key = sessionKeys[k];
-        // Skip keys that are handled explicitly or are irrelevant
-        if (
-          key === "group" || key === "ip.src" || key === "ip.dst" || 
-          key === "size" || key === "direction" || 
-          key === "latdec.src" || key === "latdec.dst" || 
-          key === "longdec.src" || key === "longdec.dst" || 
-          key === "time"
-        ) continue;
-        
-        if ((key.endsWith('.src') || key.endsWith('.srcport')) && !isSrc) continue;
-        if ((key.endsWith('.dst') || key.endsWith('.dstport')) && isSrc) continue;
-        if ((key === "ssl.ca" || key === "ssl.subject" || key === "server") && isSrc) continue;
-        if (key === "client" && !isSrc) continue;
-        
-        if (!node.attributes![key]) node.attributes![key] = [];
-        
-        const valuesToAdd = asArray(session[key]);
-        for (let vIdx = 0; vIdx < valuesToAdd.length; vIdx++) {
-          const strVal = String(valuesToAdd[vIdx]);
-          if (key === 'netname') {
-            if (strVal.endsWith(' src') && !isSrc) continue;
-            if (strVal.endsWith(' dst') && isSrc) continue;
-          }
-          if (!node.attributes![key].includes(strVal)) {
-            node.attributes![key].push(strVal);
-          }
-        }
-      }
-    };
-
-    // Update all source and destination nodes
-    for (let i = 0; i < srcs.length; i++) updateNode(String(srcs[i]), true);
-    for (let i = 0; i < dsts.length; i++) updateNode(String(dsts[i]), false);
-
-    // Create/update links
+    // Build Links
     const sizeVal = firstOf(session["size"]);
     const size = sizeVal ? (parseInt(String(sizeVal), 10) || 0) : 0;
-    const services = asArray(session["service"]);
+    const services = asArray(session["service"]).map(String);
 
-    for (let i = 0; i < srcs.length; i++) {
-      const src = String(srcs[i]);
-      for (let j = 0; j < dsts.length; j++) {
-        const dst = String(dsts[j]);
+    for (const src of srcs) {
+      for (const dst of dsts) {
         const linkId = `${src}-${dst}`;
         let link = linksMap.get(linkId);
         
@@ -178,31 +191,33 @@ export const processData = (data: NetWitnessResponse, homeLoc?: {lat: number, ln
             sessions: [],
             size: 0,
             count: 0,
-            services: new Set<string>(),
-          } as any;
+            servicesSet: new Set<string>(),
+          };
           linksMap.set(linkId, link);
         }
 
-        link!.sessions!.push(session);
-        link!.count = (link!.count || 0) + 1;
-        link!.size = (link!.size || 0) + size;
+        link.sessions!.push(session);
+        link.count = (link.count || 0) + 1;
+        link.size = (link.size || 0) + size;
         
-        for (let s = 0; s < services.length; s++) {
-          (link as any).services.add(String(services[s]));
+        for (const service of services) {
+          link.servicesSet.add(service);
         }
       }
     }
   }
 
-  // Convert Maps to arrays and format services for links
-  const linksArray = Array.from(linksMap.values());
-  for (let i = 0; i < linksArray.length; i++) {
-    const link = linksArray[i] as any;
-    link.services = Array.from(link.services);
-  }
+  // 3. Finalize Output Map
+  const finalizedLinks: Link[] = Array.from(linksMap.values()).map(builder => {
+    const { servicesSet, ...rest } = builder;
+    return {
+      ...rest,
+      services: Array.from(servicesSet)
+    } as Link; 
+  });
 
   return {
     nodes: Array.from(nodesMap.values()),
-    links: linksArray,
+    links: finalizedLinks,
   };
 };

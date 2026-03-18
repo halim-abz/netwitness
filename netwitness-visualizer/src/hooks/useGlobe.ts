@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-
 /**
- * Custom hook for shared globe initialization and control logic.
- * Handles auto-rotation, resize observation, and country data loading.
+ * useGlobe.ts
+ * 
+ * A custom hook for managing shared globe initialization and control logic.
+ * It handles auto-rotation, resize observation, and country data loading.
+ * It also manages label visibility based on camera altitude.
  */
+
+import { useState, useEffect, useRef, useCallback } from 'react';
 export function useGlobe(autoRotateEnabled: boolean = true) {
   const globeRef = useRef<any>(null);
-  const [countries, setCountries] = useState({ features: [] });
+  const [countries, setCountries] = useState<any>({ type: 'FeatureCollection', features: [] });
   const [autoRotate, setAutoRotate] = useState(autoRotateEnabled);
   const [globeSize, setGlobeSize] = useState({ width: 0, height: 0 });
   const [isReady, setIsReady] = useState(false);

@@ -1,3 +1,16 @@
+/**
+ * NetworkGraph.tsx
+ * 
+ * This component renders a 2D force-directed graph of network connections using D3.js.
+ * It visualizes relationships between IP addresses and their associated attributes
+ * (e.g., services, countries, organizations).
+ * Key features include:
+ * - D3 force simulation for dynamic layout.
+ * - Zoom and pan interactions.
+ * - Node and link highlighting on hover/selection.
+ * - Legend for attribute filtering and display toggling.
+ */
+
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import * as d3 from "d3";
 import { GraphData, Node, Link } from "../types";
@@ -24,7 +37,7 @@ export interface NetworkGraphProps {
 // Extend base types with D3 simulation properties for strict type safety
 interface GraphNode extends Node, d3.SimulationNodeDatum {
   type: string;
-  networkType?: "public" | "internal" | string;
+  networkType?: "internal" | "public" | "unknown";
   attrType?: string;
   attrValue?: string;
   country?: string;
@@ -248,7 +261,7 @@ export default function NetworkGraph({
       .join("g")
       .attr("class", "graph-node")
       .style("cursor", "pointer")
-      .call(drag)
+      .call(drag as any)
       .on("dblclick", (event: MouseEvent, d) => {
         event.stopPropagation();
         d.fx = null;
@@ -419,8 +432,8 @@ export default function NetworkGraph({
 
       nodes.style("opacity", d => visibleNodeIds.has(d.id) ? 1 : 0.1).style("transition", "opacity 0.3s");
       nodes.selectAll("circle:first-child, rect")
-        .attr("stroke", d => focusedNodeIds.has(d.id) ? "#f59e0b" : (isDark ? "#0f172a" : "#ffffff"))
-        .attr("stroke-width", d => focusedNodeIds.has(d.id) ? 3 : 2);
+        .attr("stroke", (d: any) => focusedNodeIds.has(d.id) ? "#f59e0b" : (isDark ? "#0f172a" : "#ffffff"))
+        .attr("stroke-width", (d: any) => focusedNodeIds.has(d.id) ? 3 : 2);
       
       links.style("opacity", d => {
         const sId = resolveId(d.source);
@@ -559,7 +572,7 @@ const LegendPanel = ({
                     <div className="flex items-center justify-between group">
                       <div className={`flex items-center gap-2 cursor-pointer transition-opacity hover:opacity-80 ${isActive ? 'opacity-100' : 'opacity-40'}`} onClick={() => onToggleAttribute(attr)}>
                         <div className="w-3 h-3 rounded-sm border border-white dark:border-gray-950 shadow-sm shrink-0" style={{ backgroundColor: isActive ? getColor(attr, availableAttributes) : '#94a3b8' }}></div>
-                        <span className={`text-xs font-medium truncate ${isActive ? 'text-gray-800 dark:text-gray-300' : 'text-gray-500 dark:text-gray-500'}`}>{attr}</span>
+                        <span className={`text-xs font-medium truncate ${isActive ? 'text-gray-800 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>{attr}</span>
                       </div>
                       {isActive && (
                         <button onClick={(e) => { e.stopPropagation(); setExpandedFilters((prev: any) => ({...prev, [attr]: !prev[attr]})) }} className="text-gray-400 opacity-0 group-hover:opacity-100"><Filter size={10} /></button>

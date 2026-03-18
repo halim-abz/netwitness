@@ -1,3 +1,10 @@
+/**
+ * vite.config.ts
+ * 
+ * Vite configuration file for the project.
+ * It sets up the React plugin, Tailwind CSS integration, and dev server options.
+ */
+
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';

@@ -47,6 +47,89 @@ async function startServer() {
     }
   });
 
+  app.post("/api/alerts", async (req, res) => {
+    try {
+      const { host, port, username, password, since } = req.body;
+      
+      if (!host || !username || !password) {
+        return res.status(400).json({ 
+          error: "Missing connection details. Please check host, username, and password." 
+        });
+      }
+
+      const hostWithPort = port ? `${host}:${port}` : host;
+      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+      // Helper for https request
+      const makeRequest = (url: string, options: any, postData?: string) => {
+        return new Promise<any>((resolve, reject) => {
+          const req = https.request(url, { ...options, agent: httpsAgent }, (response) => {
+            let data = '';
+            response.on('data', (chunk) => { data += chunk; });
+            response.on('end', () => {
+              if (response.statusCode && response.statusCode >= 400) {
+                reject({ status: response.statusCode, data });
+              } else {
+                try {
+                  resolve(JSON.parse(data));
+                } catch (e) {
+                  resolve(data);
+                }
+              }
+            });
+          });
+          req.on('error', reject);
+          if (postData) {
+            req.write(postData);
+          }
+          req.end();
+        });
+      };
+
+      // 1. Authenticate to get token
+      const authUrl = `https://${hostWithPort}/rest/api/auth/userpass?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+      
+      let token;
+      try {
+        const authData = await makeRequest(authUrl, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json;charset=UTF-8',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=ISO-8859-1'
+          }
+        });
+        token = authData.accessToken;
+      } catch (err: any) {
+        return res.status(err.status || 500).json({ error: "Authentication failed", details: err.data || err.message });
+      }
+
+      if (!token) {
+        return res.status(401).json({ error: "Failed to retrieve access token" });
+      }
+
+      // 2. Fetch alerts
+      const sinceParam = since ? `?since=${encodeURIComponent(since)}` : '';
+      const alertsUrl = `https://${hostWithPort}/rest/api/alerts${sinceParam}`;
+
+      try {
+        const alertsData = await makeRequest(alertsUrl, {
+          method: 'GET',
+          headers: {
+            'NetWitness-Token': token,
+            'Accept': 'application/json'
+          }
+        });
+        res.json(alertsData);
+      } catch (err: any) {
+        return res.status(err.status || 500).json({ error: "Failed to fetch alerts", details: err.data || err.message });
+      }
+
+    } catch (error: any) {
+      console.error("Error fetching alerts:", error);
+      res.status(500).json({ error: "Internal server error", details: error.message });
+    }
+  });
+
   app.post("/api/query", async (req, res) => {
     try {
       const { host, port, query, size, username, password } = req.body;
@@ -57,9 +140,28 @@ async function startServer() {
         });
       }
 
-      const url = `https://${host}:${port}/sdk?msg=query&force-content-type=application/json&size=${size || 100}&query=${encodeURIComponent(query)}`;
+      // Input Validation & Sanitization
+      if (typeof host !== 'string' || typeof port !== 'number' && isNaN(Number(port))) {
+        return res.status(400).json({ error: "Invalid host or port format." });
+      }
+
+      if (typeof query !== 'string') {
+        return res.status(400).json({ error: "Query must be a string." });
+      }
+
+      // Basic SSRF Protection: Prevent querying local loopback addresses in production
+      const forbiddenHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1'];
+      if (process.env.NODE_ENV === 'production' && forbiddenHosts.includes(host.toLowerCase())) {
+        return res.status(403).json({ error: "Querying local addresses is forbidden." });
+      }
+
+      // Sanitize query to remove control characters that could cause issues
+      const sanitizedQuery = query.replace(/[\x00-\x1F\x7F]/g, '');
+      const parsedSize = parseInt(String(size), 10) || 100;
+
+      const url = `https://${host}:${port}/sdk?msg=query&force-content-type=application/json&size=${parsedSize}&query=${encodeURIComponent(sanitizedQuery)}`;
       
-      // Ignore self-signed certificates for NetWitness API
+      // In production, this should be true to prevent Man-in-the-Middle attacks
       const httpsAgent = new https.Agent({
         rejectUnauthorized: false,
       });
@@ -81,40 +183,43 @@ async function startServer() {
         timeout: TIMEOUT
       };
 
-      const makeRequest = () => new Promise((resolve, reject) => {
+      const makeRequest = () => new Promise<void>((resolve, reject) => {
         const req = https.request(url, requestOptions, (response) => {
-          let data = '';
-          let totalLength = 0;
+          if (response.statusCode && response.statusCode >= 400) {
+            let data = '';
+            response.on('data', (chunk) => { data += chunk; });
+            response.on('end', () => {
+              let errorDetail = data;
+              try {
+                const parsed = JSON.parse(data);
+                errorDetail = parsed.message || data;
+              } catch (e) {}
+              reject({ 
+                message: `NetWitness API Error (${response.statusCode}): ${errorDetail}`, 
+                status: response.statusCode,
+                detail: errorDetail
+              });
+            });
+            return;
+          }
 
+          res.status(response.statusCode || 200);
+          res.setHeader('Content-Type', 'application/json');
+          
+          let totalLength = 0;
           response.on('data', (chunk) => {
             totalLength += chunk.length;
             if (totalLength > MAX_SIZE) {
               req.destroy();
+              res.end();
               reject({ message: "Response too large (limit 500MB)", code: 'SIZE_EXCEEDED' });
               return;
             }
-            data += chunk;
           });
-          response.on('end', () => {
-            try {
-              if (response.statusCode && response.statusCode >= 400) {
-                let errorDetail = data;
-                try {
-                  const parsed = JSON.parse(data);
-                  errorDetail = parsed.message || data;
-                } catch (e) {}
-                reject({ 
-                  message: `NetWitness API Error (${response.statusCode}): ${errorDetail}`, 
-                  status: response.statusCode,
-                  detail: errorDetail
-                });
-              } else {
-                resolve(JSON.parse(data));
-              }
-            } catch (e) {
-              reject({ message: "Failed to parse NetWitness response", detail: e instanceof Error ? e.message : String(e) });
-            }
-          });
+
+          response.pipe(res);
+          response.on('end', () => resolve());
+          response.on('error', (err) => reject({ message: "Failed to stream NetWitness response", detail: err.message }));
         });
 
         req.on('timeout', () => {
@@ -134,15 +239,16 @@ async function startServer() {
         req.end();
       });
 
-      const data = await makeRequest();
-      res.json(data);
+      await makeRequest();
     } catch (error: any) {
-      console.error("Error querying NetWitness:", error.message || error);
-      res.status(error.status || 500).json({ 
-        error: error.message || "Failed to query NetWitness", 
-        details: error.detail || error.message,
-        code: error.code
-      });
+      if (!res.headersSent) {
+        console.error("Error querying NetWitness:", error.message || error);
+        res.status(error.status || 500).json({ 
+          error: error.message || "Failed to query NetWitness", 
+          details: error.detail || error.message,
+          code: error.code
+        });
+      }
     }
   });
 
