@@ -9,6 +9,7 @@ This is a custom dashboard built to visualize data from NetWitness. The dashboar
 ### Globe Dashboard
 
 This dashboard represents queried data on an interactive 3D globe. Clicking on values from the globe or the right panel expands the view with more details.
+![Globe Dashboard](screenshots/NwViz_Globe.png)
 
 **Key Features:**
 
@@ -25,6 +26,7 @@ This dashboard represents queried data on an interactive 3D globe. Clicking on v
 ### Graph Dashboard
 
 This dashboard represents the queried data in an interactive node diagram, visualizing connections and relationships between different IPs and attributes. Clicking on any value expands a view with additional node details.
+![Globe Dashboard](screenshots/NwViz_Graph.png)
 
 **Key Features:**
 
@@ -38,10 +40,12 @@ This dashboard represents the queried data in an interactive node diagram, visua
 ### Assets Dashboard
 
 This dashboard displays information around discovered assets within the queried dataset. It helps visualize attributes, categorizations, and profiling of assets based on the data.
+![Globe Dashboard](screenshots/NwViz_Assets.png)
 
 ### Alerts Dashboard
 
 This dashboard displays alerts data from the NetWitness Respond service.
+![Globe Dashboard](screenshots/NwViz_Alerts.png)
 
 **Key Features:**
 
@@ -51,6 +55,7 @@ This dashboard displays alerts data from the NetWitness Respond service.
 ### News Dashboard
 
 This dashboard provides a news feed from RSS sources (it does not pull data from NetWitness).
+![Globe Dashboard](screenshots/NwViz_News.png)
 
 **Key Features:**
 
