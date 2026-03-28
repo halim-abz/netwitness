@@ -1,15 +1,11 @@
-import React, { useState, useMemo, useEffect, memo } from 'react';
-import { GraphData, Node, Link } from '../types';
+import { useState, useMemo, useEffect } from 'react';
+import { GraphData } from '../types';
 import { 
   Search, Filter, Server, Monitor, ArrowRightLeft, Activity, Shield, 
   Globe, Clock, Network, FileText, Target, User, 
   MonitorSmartphone, Lock, Mail, Key, Fingerprint, FileBadge
 } from 'lucide-react';
-import { 
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, 
-  LineChart, Line, PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis, 
-  ReferenceLine, LabelList, RadarChart, PolarGrid, PolarAngleAxis, Radar, TooltipProps
-} from 'recharts';
+import ReactECharts from 'echarts-for-react';
 import { useAssetsData, Asset } from '../hooks/useAssetsData';
 
 // --- Types & Interfaces ---
@@ -31,13 +27,17 @@ const COLORS = [
 ];
 
 const PORT_MAP: Record<string, string> = {
-  '80': 'HTTP', '443': 'HTTPS', '53': 'DNS', '22': 'SSH', '21': 'FTP',
-  '23': 'Telnet', '25': 'SMTP', '110': 'POP3', '143': 'IMAP',
-  '3389': 'RDP', '445': 'SMB', '139': 'NetBIOS', '389': 'LDAP',
-  '1433': 'MSSQL', '3306': 'MySQL', '5432': 'PostgreSQL',
-  '1521': 'Oracle', '6379': 'Redis', '27017': 'MongoDB',
-  '8080': 'HTTP-Proxy', '8443': 'HTTPS-Alt', '5900': 'VNC',
-  '123': 'NTP', '161': 'SNMP', '69': 'TFTP'
+  '0': 'OTHER', '20': 'FTPD', '21': 'FTP', '22': 'SSH', '23': 'TELNET',
+  '25': 'SMTP', '53': 'DNS', '67': 'DHCP', '69': 'TFTP', '80': 'HTTP',
+  '88': 'KERBEROS', '110': 'POP3', '111': 'SUNRPC', '119': 'NNTP', '123': 'NTP',
+  '135': 'RPC', '137': 'NETBIOS', '138': 'NETBIOS-DGM', '139': 'SMB', '143': 'IMAP',
+  '161': 'SNMP', '179': 'BGP', '389': 'LDAP', '443': 'SSL', '465': 'SMTPS',
+  '500': 'ISAKMP', '502': 'MODBUS', '520': 'RIP', '554': 'RTSP', '995': 'POP3S',
+  '1024': 'EXCHANGE', '1080': 'SOCKS', '1344': 'ICAP', '1433': 'TDS', '1521': 'TNS',
+  '1719': 'H.323', '1720': 'RTP', '1812': 'RADIUS', '1813': 'RADIUS-ACCT', '2049': 'NFS',
+  '3270': 'TN3270', '3389': 'RDP', '3700': 'DB2', '5060': 'SIP', '5222': 'Google Talk',
+  '5900': 'VNC', '5938': 'TEAMVIEWER', '6346': 'GNUTELLA', '6667': 'IRC', '6881': 'BITTORRENT',
+  '7001': 'Oracle_T3', '20000': 'DNP3'
 };
 
 // --- Pure Utility Functions ---
@@ -110,52 +110,6 @@ const getRoleColor = (role: string): string => {
 };
 
 // --- Sub-Components ---
-
-const CustomTooltip = memo(({ active, payload, label, formatter, labelFormatter, isDark }: any) => {
-  if (!active || !payload || !payload.length) return null;
-
-  const displayLabel = labelFormatter ? labelFormatter(label as string, payload) : label;
-  
-  return (
-    <div className={`p-3 border rounded-lg shadow-lg ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-      {displayLabel !== '' && displayLabel != null && (
-        <div className="text-sm font-semibold mb-2 border-b border-gray-100 dark:border-gray-700 pb-1 text-gray-800 dark:text-gray-200">
-          {displayLabel}
-        </div>
-      )}
-      <div className="space-y-1.5">
-        {payload.map((entry: any, index: number) => {
-          let val = entry.value as React.ReactNode;
-          let name = entry.name ?? 'Value';
-          
-          if (formatter) {
-            const f = formatter(entry.value as any, entry.name as string, entry, index, payload);
-            if (Array.isArray(f)) {
-              val = f[0];
-              name = f[1] !== undefined ? f[1] : name;
-            } else {
-              val = f;
-            }
-          }
-
-          const color = entry.color || entry.fill || entry.stroke || '#8b5cf6';
-
-          return (
-            <div key={`item-${index}`} className="flex items-center justify-between gap-6 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                <span className="text-gray-500 dark:text-gray-400 font-medium capitalize">{name}</span>
-              </div>
-              <span className="font-mono font-semibold text-gray-900 dark:text-gray-100">{val}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-});
-
-CustomTooltip.displayName = 'CustomTooltip';
 
 const ServiceMetricBar = ({ name, volume, maxVolume, color }: { name: string, volume: number, maxVolume: number, color: string }) => (
   <div className="relative">
@@ -293,6 +247,51 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
     }).sort((a, b) => b.volume - a.volume);
   }, [selectedAsset]);
 
+  const webDnsTlds = useMemo(() => {
+    if (!selectedAsset) return [];
+    return Array.from(selectedAsset.webDnsTlds.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [selectedAsset]);
+
+  const webDnsActions = useMemo(() => {
+    if (!selectedAsset) return [];
+    return Array.from(selectedAsset.webDnsActions.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [selectedAsset]);
+
+  const webDnsErrors = useMemo(() => {
+    if (!selectedAsset) return [];
+    return Array.from(selectedAsset.webDnsErrors.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }, [selectedAsset]);
+
+  const webDnsPorts = useMemo(() => {
+    if (!selectedAsset) return [];
+    const ports = new Map<string, number>();
+    
+    selectedAsset.tcpPorts.forEach((vol, port) => {
+      if (['80', '443', '8080', '8443', '53'].includes(port)) {
+        ports.set(`TCP/${port}`, vol);
+      }
+    });
+    
+    selectedAsset.udpPorts.forEach((vol, port) => {
+      if (['53', '443'].includes(port)) {
+        ports.set(`UDP/${port}`, vol);
+      }
+    });
+
+    return Array.from(ports.entries())
+      .map(([port, volume]) => ({ port, volume }))
+      .sort((a, b) => b.volume - a.volume);
+  }, [selectedAsset]);
+
   const radarData = useMemo(() => {
     if (!selectedAsset) return [];
     
@@ -316,12 +315,12 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
     
     return [
       { subject: 'Web', value: (web / maxVal) * 100 },
-      { subject: 'Database', value: (db / maxVal) * 100 },
-      { subject: 'Mail', value: (mail / maxVal) * 100 },
       { subject: 'File Sharing', value: (files / maxVal) * 100 },
       { subject: 'Remote Access', value: (racc / maxVal) * 100 },
-      { subject: 'Auth', value: (idauth / maxVal) * 100 },
-      { subject: 'Infra', value: (infra / maxVal) * 100 }
+      { subject: 'Database', value: (db / maxVal) * 100 },
+      { subject: 'Mail', value: (mail / maxVal) * 100 },
+      { subject: 'Infra', value: (infra / maxVal) * 100 },
+      { subject: 'Auth', value: (idauth / maxVal) * 100 }      
     ];
   }, [selectedAsset]);
 
@@ -339,8 +338,8 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
       if (isFileShare) fileShareVolume += vol;
     };
 
-    selectedAsset.serverServices.forEach(s => categorize(s.name, s.volume, (s as any).sessions || 0));
-    selectedAsset.clientServices.forEach(s => categorize(s.name, s.volume, (s as any).sessions || 0));
+    selectedAsset.serverServices.forEach(s => categorize(s.name, s.volume, (s as { sessions?: number }).sessions || 0));
+    selectedAsset.clientServices.forEach(s => categorize(s.name, s.volume, (s as { sessions?: number }).sessions || 0));
 
     return { remoteSessions, fileShareVolume };
   }, [selectedAsset]);
@@ -517,7 +516,7 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                         : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                     }`}
                   >
-                    {tab === 'ssl' ? 'SSL / TLS' : tab}
+                    {tab === 'ssl' ? 'SSL / TLS' : tab === 'services' ? 'Web/Domain' : tab}
                     {activeTab === tab && (
                       <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 dark:bg-blue-400" />
                     )}
@@ -562,14 +561,33 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                         Asset Capability Profile
                       </h3>
                       <div className="flex-1 min-h-[180px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                            <PolarGrid stroke={isDark ? '#374151' : '#e5e7eb'} />
-                            <PolarAngleAxis dataKey="subject" tick={{ fill: isDark ? '#9ca3af' : '#4b5563', fontSize: 10 }} />
-                            <Tooltip content={<CustomTooltip isDark={isDark} />} formatter={(value: any) => `${Math.round(value)}%`} />
-                            <Radar name="Profile" dataKey="value" stroke="#6366f1" fill="#6366f1" fillOpacity={0.4} />
-                          </RadarChart>
-                        </ResponsiveContainer>
+                        <ReactECharts 
+                          option={{
+                            tooltip: {
+                              trigger: 'item',
+                              backgroundColor: isDark ? '#111827' : '#ffffff',
+                              borderColor: isDark ? '#374151' : '#e5e7eb',
+                              textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                              formatter: (params: any) => `${params.name}: ${Math.round(Number(params.value))}%`
+                            },
+                            radar: {
+                              indicator: radarData.map(d => ({ name: d.subject, max: 100 })),
+                              splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb' } },
+                              splitArea: { show: false },
+                              axisLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb' } },
+                              axisName: { color: isDark ? '#9ca3af' : '#4b5563', fontSize: 10 }
+                            },
+                            series: [{
+                              name: 'Profile',
+                              type: 'radar',
+                              data: [{ value: radarData.map(d => d.value), name: 'Profile' }],
+                              itemStyle: { color: '#6366f1' },
+                              areaStyle: { color: '#6366f1', opacity: 0.4 }
+                            }]
+                          }}
+                          style={{ height: '100%', width: '100%' }}
+                          opts={{ renderer: 'canvas' }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -688,47 +706,225 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
               {/* Other Tabs omitted for brevity in response but maintained in full integration logic */}
               {activeTab === 'services' && (
                 <div className="space-y-6">
-                  <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
-                      <Globe size={18} className="text-blue-500" />
-                      <h3 className="font-semibold">Top Domains by Traffic</h3>
-                    </div>
-                    {domainStats.length > 0 ? (
-                      <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs uppercase">
-                          <tr>
-                            <th className="px-4 py-3 font-medium">Domain Name</th>
-                            <th className="px-4 py-3 font-medium text-right">Sessions</th>
-                            <th className="px-4 py-3 font-medium text-right">Volume</th>
-                            <th className="px-4 py-3 w-48"></th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                          {domainStats.slice(0, 15).map((stat, idx) => {
-                            const maxVol = domainStats[0].volume;
-                            const pct = (stat.volume / maxVol) * 100;
-                            return (
-                              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                                <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]" title={stat.domain}>
-                                  {stat.domain}
-                                 </td>
-                                <td className="px-4 py-3 text-right text-gray-500">{stat.sessions.toLocaleString()}</td>
-                                <td className="px-4 py-3 text-right font-mono text-gray-500">{formatBytes(stat.volume)}</td>
-                                <td className="px-4 py-3">
-                                  <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                                    <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%`, opacity: Math.max(0.4, pct / 100) }} />
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <div className="p-6 text-center text-sm text-gray-500">
-                        No domains detected. Ensure the <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">domain</code> meta key is enabled in your query.
+                  {/* Web & DNS Traffic Breakdown */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+                      <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                        <Globe size={16} className="text-blue-500" />
+                        Top TLDs (Web/DNS)
+                      </h3>
+                      <div className="h-64">
+                        {webDnsTlds.length > 0 ? (
+                          <ReactECharts 
+                            option={{
+                              tooltip: {
+                                trigger: 'axis',
+                                axisPointer: { type: 'shadow' },
+                                backgroundColor: isDark ? '#111827' : '#ffffff',
+                                borderColor: isDark ? '#374151' : '#e5e7eb',
+                                textStyle: { color: isDark ? '#d1d5db' : '#374151' }
+                              },
+                              grid: { top: 5, right: 30, bottom: 5, left: 20, containLabel: true },
+                              xAxis: { type: 'value', show: false },
+                              yAxis: {
+                                type: 'category',
+                                data: webDnsTlds.map(d => d.name),
+                                axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', width: 80, overflow: 'truncate' },
+                                axisLine: { show: false },
+                                axisTick: { show: false }
+                              },
+                              series: [{
+                                type: 'bar',
+                                data: webDnsTlds.map(d => d.count),
+                                itemStyle: { color: '#3b82f6', borderRadius: [0, 4, 4, 0] }
+                              }]
+                            }}
+                            style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: 'canvas' }}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                            No TLDs detected.
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+                      <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                        <Globe size={16} className="text-teal-500" />
+                        Top Actions (Web/DNS)
+                      </h3>
+                      <div className="h-64">
+                        {webDnsActions.length > 0 ? (
+                          <ReactECharts 
+                            option={{
+                              tooltip: {
+                                trigger: 'axis',
+                                axisPointer: { type: 'shadow' },
+                                backgroundColor: isDark ? '#111827' : '#ffffff',
+                                borderColor: isDark ? '#374151' : '#e5e7eb',
+                                textStyle: { color: isDark ? '#d1d5db' : '#374151' }
+                              },
+                              grid: { top: 5, right: 30, bottom: 5, left: 20, containLabel: true },
+                              xAxis: { type: 'value', show: false },
+                              yAxis: {
+                                type: 'category',
+                                data: webDnsActions.map(d => d.name),
+                                axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', width: 80, overflow: 'truncate' },
+                                axisLine: { show: false },
+                                axisTick: { show: false }
+                              },
+                              series: [{
+                                type: 'bar',
+                                data: webDnsActions.map(d => d.count),
+                                itemStyle: { color: '#10b981', borderRadius: [0, 4, 4, 0] }
+                              }]
+                            }}
+                            style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: 'canvas' }}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                            No actions detected.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+                      <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                        <Globe size={16} className="text-red-500" />
+                        Top Errors (Web/DNS)
+                      </h3>
+                      <div className="h-64">
+                        {webDnsErrors.length > 0 ? (
+                          <ReactECharts 
+                            option={{
+                              tooltip: {
+                                trigger: 'axis',
+                                axisPointer: { type: 'shadow' },
+                                backgroundColor: isDark ? '#111827' : '#ffffff',
+                                borderColor: isDark ? '#374151' : '#e5e7eb',
+                                textStyle: { color: isDark ? '#d1d5db' : '#374151' }
+                              },
+                              grid: { top: 5, right: 30, bottom: 5, left: 20, containLabel: true },
+                              xAxis: { type: 'value', show: false },
+                              yAxis: {
+                                type: 'category',
+                                data: webDnsErrors.map(d => d.name),
+                                axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', width: 80, overflow: 'truncate' },
+                                axisLine: { show: false },
+                                axisTick: { show: false }
+                              },
+                              series: [{
+                                type: 'bar',
+                                data: webDnsErrors.map(d => d.count),
+                                itemStyle: { color: '#ef4444', borderRadius: [0, 4, 4, 0] }
+                              }]
+                            }}
+                            style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: 'canvas' }}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                            No errors detected.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+                      <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
+                        <Globe size={18} className="text-blue-500" />
+                        <h3 className="font-semibold">Top Domains by Traffic</h3>
+                      </div>
+                      {domainStats.length > 0 ? (
+                        <table className="w-full text-sm text-left">
+                          <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 dark:text-gray-400 text-xs uppercase">
+                            <tr>
+                              <th className="px-4 py-3 font-medium">Domain Name</th>
+                              <th className="px-4 py-3 font-medium text-right">Sessions</th>
+                              <th className="px-4 py-3 font-medium text-right">Volume</th>
+                              <th className="px-4 py-3 w-48"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {domainStats.slice(0, 15).map((stat, idx) => {
+                              const maxVol = domainStats[0].volume;
+                              const pct = (stat.volume / maxVol) * 100;
+                              return (
+                                <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]" title={stat.domain}>
+                                    {stat.domain}
+                                   </td>
+                                  <td className="px-4 py-3 text-right text-gray-500">{stat.sessions.toLocaleString()}</td>
+                                  <td className="px-4 py-3 text-right font-mono text-gray-500">{formatBytes(stat.volume)}</td>
+                                  <td className="px-4 py-3">
+                                    <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%`, opacity: Math.max(0.4, pct / 100) }} />
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div className="p-6 text-center text-sm text-gray-500">
+                          No domains detected. Ensure the <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">domain</code> meta key is enabled in your query.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-5">
+                      <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                        <Globe size={16} className="text-indigo-500" />
+                        Top Web/DNS Ports
+                      </h3>
+                      <div className="h-64">
+                        {webDnsPorts.length > 0 ? (
+                          <ReactECharts 
+                            option={{
+                              tooltip: {
+                                trigger: 'axis',
+                                axisPointer: { type: 'shadow' },
+                                backgroundColor: isDark ? '#111827' : '#ffffff',
+                                borderColor: isDark ? '#374151' : '#e5e7eb',
+                                textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                                formatter: (params: any) => `${params[0].name}: ${formatBytes(Number(params[0].value))}`
+                              },
+                              grid: { top: 5, right: 30, bottom: 5, left: 20, containLabel: true },
+                              xAxis: { 
+                                type: 'value', 
+                                axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', formatter: (value: number) => formatBytes(value) },
+                                splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed' } }
+                              },
+                              yAxis: {
+                                type: 'category',
+                                data: webDnsPorts.map(d => d.port),
+                                axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', width: 80, overflow: 'truncate' },
+                                axisLine: { show: false },
+                                axisTick: { show: false }
+                              },
+                              series: [{
+                                type: 'bar',
+                                data: webDnsPorts.map(d => d.volume),
+                                itemStyle: { color: '#6366f1', borderRadius: [0, 4, 4, 0] }
+                              }]
+                            }}
+                            style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: 'canvas' }}
+                          />
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-sm text-gray-500">
+                            No standard Web or DNS ports detected.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -856,32 +1052,49 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                     </h3>
                     <div className="h-64 w-full">
                       {selectedAsset.timeSeries.size > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={Array.from(selectedAsset.timeSeries.entries()).map(([time, vol]) => ({ time: new Date(time * 1000).toLocaleTimeString(), volume: vol })).sort((a, b) => a.time.localeCompare(b.time))}>
-                            <XAxis dataKey="time" stroke={isDark ? '#4b5563' : '#9ca3af'} fontSize={12} tickMargin={10} />
-                            <YAxis stroke={isDark ? '#4b5563' : '#9ca3af'} fontSize={12} tickFormatter={formatBytes} width={80} />
-                            <Tooltip 
-                              content={<CustomTooltip isDark={isDark} />}
-                              formatter={(value: any) => [formatBytes(value), 'Volume']}
-                            />
-                            <Line type="monotone" dataKey="volume" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 6 }} />
-                            {selectedAsset.indicators.map((ind, idx) => (
-                              <ReferenceLine 
-                                key={idx}
-                                x={new Date(ind.time * 1000).toLocaleTimeString()}
-                                stroke={ind.type === 'ioc' ? '#ef4444' : '#f59e0b'}
-                                strokeDasharray="3 3"
-                                label={{ 
-                                  position: 'insideTopLeft', 
-                                  value: ind.type.toUpperCase(), 
-                                  fill: ind.type === 'ioc' ? '#ef4444' : '#f59e0b', 
-                                  fontSize: 10,
-                                  fontWeight: 'bold'
-                                }}
-                              />
-                            ))}
-                          </LineChart>
-                        </ResponsiveContainer>
+                        <ReactECharts 
+                          option={{
+                            tooltip: {
+                              trigger: 'axis',
+                              backgroundColor: isDark ? '#111827' : '#ffffff',
+                              borderColor: isDark ? '#374151' : '#e5e7eb',
+                              textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                              formatter: (params: any) => `${params[0].name}<br/>Volume: ${formatBytes(Number(params[0].value))}`
+                            },
+                            grid: { top: 20, right: 20, bottom: 20, left: 20, containLabel: true },
+                            xAxis: {
+                              type: 'category',
+                              data: Array.from(selectedAsset.timeSeries.entries()).map(([time]) => new Date(time * 1000).toLocaleTimeString()).sort(),
+                              axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 12 },
+                              axisLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb' } }
+                            },
+                            yAxis: {
+                              type: 'value',
+                              axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 12, formatter: (value: number) => formatBytes(value) },
+                              splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed' } }
+                            },
+                            series: [{
+                              type: 'line',
+                              data: Array.from(selectedAsset.timeSeries.entries()).sort((a, b) => a[0] - b[0]).map(([, vol]) => vol),
+                              smooth: true,
+                              showSymbol: false,
+                              itemStyle: { color: '#3b82f6' },
+                              lineStyle: { width: 2 },
+                              markLine: {
+                                symbol: ['none', 'none'],
+                                label: { position: 'insideStartTop', formatter: '{b}' },
+                                data: selectedAsset.indicators.map(ind => ({
+                                  xAxis: new Date(ind.time * 1000).toLocaleTimeString(),
+                                  name: ind.type.toUpperCase(),
+                                  lineStyle: { color: ind.type === 'ioc' ? '#ef4444' : '#f59e0b', type: 'dashed' },
+                                  label: { color: ind.type === 'ioc' ? '#ef4444' : '#f59e0b', fontSize: 10, fontWeight: 'bold' }
+                                }))
+                              }
+                            }]
+                          }}
+                          style={{ height: '100%', width: '100%' }}
+                          opts={{ renderer: 'canvas' }}
+                        />
                       ) : (
                         <div className="h-full flex items-center justify-center text-gray-500">No time series data available</div>
                       )}
@@ -898,37 +1111,44 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                     </div>
                     <div className="h-80 w-full">
                       {flowBarData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 40 }}>
-                            <XAxis 
-                              type="number" 
-                              dataKey="outboundVolume" 
-                              name="Data Exfiltrated (Outbound TX)" 
-                              tickFormatter={formatBytes} 
-                              stroke={isDark ? '#4b5563' : '#9ca3af'} 
-                              fontSize={11} 
-                            />
-                            <YAxis 
-                              type="number" 
-                              dataKey="inboundVolume" 
-                              name="Data Downloaded (Inbound RX)" 
-                              tickFormatter={formatBytes} 
-                              stroke={isDark ? '#4b5563' : '#9ca3af'} 
-                              fontSize={11} 
-                            />
-                            <ZAxis type="number" dataKey="sessions" range={[50, 400]} name="Sessions" />
-                            <Tooltip 
-                              cursor={{ strokeDasharray: '3 3' }} 
-                              content={<CustomTooltip isDark={isDark} />}
-                              formatter={(value: any, name: any) => [
-                                name === 'Sessions' ? value : formatBytes(value), 
-                                name
-                              ]}
-                              labelFormatter={() => ''}
-                            />
-                            <Scatter name="Peers" data={flowBarData} fill="#ec4899" opacity={0.7} />
-                          </ScatterChart>
-                        </ResponsiveContainer>
+                        <ReactECharts 
+                          option={{
+                            tooltip: {
+                              backgroundColor: isDark ? '#111827' : '#ffffff',
+                              borderColor: isDark ? '#374151' : '#e5e7eb',
+                              textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                              formatter: (params: any) => {
+                                const data = params.data;
+                                return `Outbound: ${formatBytes(data[0])}<br/>Inbound: ${formatBytes(data[1])}<br/>Sessions: ${data[2]}`;
+                              }
+                            },
+                            grid: { top: 20, right: 30, bottom: 20, left: 40, containLabel: true },
+                            xAxis: {
+                              type: 'value',
+                              name: 'Data Exfiltrated (Outbound TX)',
+                              nameLocation: 'middle',
+                              nameGap: 25,
+                              axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 11, formatter: (value: number) => formatBytes(value) },
+                              splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed' } }
+                            },
+                            yAxis: {
+                              type: 'value',
+                              name: 'Data Downloaded (Inbound RX)',
+                              nameLocation: 'middle',
+                              nameGap: 40,
+                              axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 11, formatter: (value: number) => formatBytes(value) },
+                              splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed' } }
+                            },
+                            series: [{
+                              type: 'scatter',
+                              symbolSize: (data: any) => Math.max(10, Math.min(50, data[2] / 5)),
+                              itemStyle: { color: '#ec4899', opacity: 0.7 },
+                              data: flowBarData.map(d => [d.outboundVolume, d.inboundVolume, d.sessions])
+                            }]
+                          }}
+                          style={{ height: '100%', width: '100%' }}
+                          opts={{ renderer: 'canvas' }}
+                        />
                       ) : (
                         <div className="h-full flex items-center justify-center text-gray-500">No peer symmetry data</div>
                       )}
@@ -972,26 +1192,35 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                         Geographic Distribution
                       </h3>
                       <div className="h-80 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart 
-                            layout="vertical" 
-                            data={geoData.slice(0, 10)}
-                            margin={{ top: 0, right: 20, left: 40, bottom: 0 }}
-                          >
-                            <XAxis type="number" hide />
-                            <YAxis type="category" dataKey="country" stroke={isDark ? '#9ca3af' : '#4b5563'} axisLine={false} tickLine={false} />
-                            <Tooltip 
-                              cursor={{ fill: isDark ? '#374151' : '#f3f4f6' }}
-                              content={<CustomTooltip isDark={isDark} />}
-                              formatter={(value: any) => formatBytes(value)}
-                            />
-                            <Bar dataKey="volume" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
-                              {geoData.slice(0, 10).map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
+                        <ReactECharts 
+                          option={{
+                            tooltip: {
+                              trigger: 'axis',
+                              axisPointer: { type: 'shadow' },
+                              backgroundColor: isDark ? '#111827' : '#ffffff',
+                              borderColor: isDark ? '#374151' : '#e5e7eb',
+                              textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                              formatter: (params: any) => `${params[0].name}: ${formatBytes(Number(params[0].value))}`
+                            },
+                            grid: { top: 0, right: 20, bottom: 0, left: 40, containLabel: true },
+                            xAxis: { type: 'value', show: false },
+                            yAxis: {
+                              type: 'category',
+                              data: geoData.slice(0, 10).map(d => d.country),
+                              axisLabel: { color: isDark ? '#9ca3af' : '#4b5563' },
+                              axisLine: { show: false },
+                              axisTick: { show: false }
+                            },
+                            series: [{
+                              type: 'bar',
+                              data: geoData.slice(0, 10).map((d, i) => ({ value: d.volume, itemStyle: { color: COLORS[i % COLORS.length] } })),
+                              itemStyle: { borderRadius: [0, 4, 4, 0] },
+                              barWidth: 20
+                            }]
+                          }}
+                          style={{ height: '100%', width: '100%' }}
+                          opts={{ renderer: 'canvas' }}
+                        />
                       </div>
                     </div>
                   </div>
@@ -1008,30 +1237,31 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                       </h3>
                       <div className="h-64 w-full relative">
                         {selectedAsset.totalVolume > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={[
-                                  { name: 'Encrypted', value: selectedAsset.encryptedVolume },
-                                  { name: 'Plaintext', value: selectedAsset.plaintextVolume }
-                                ]}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={70}
-                                outerRadius={90}
-                                paddingAngle={2}
-                                dataKey="value"
-                              >
-                                <Cell fill="#10b981" />
-                                <Cell fill="#ef4444" />
-                              </Pie>
-                              <Tooltip 
-                                content={<CustomTooltip isDark={isDark} />}
-                                formatter={(value: any) => formatBytes(value)}
-                              />
-                              <Legend verticalAlign="bottom" height={36} />
-                            </PieChart>
-                          </ResponsiveContainer>
+                          <ReactECharts 
+                            option={{
+                              tooltip: {
+                                trigger: 'item',
+                                backgroundColor: isDark ? '#111827' : '#ffffff',
+                                borderColor: isDark ? '#374151' : '#e5e7eb',
+                                textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                                formatter: (params: any) => `${params.name}: ${formatBytes(Number(params.value))} (${params.percent}%)`
+                              },
+                              legend: { bottom: 0, textStyle: { color: isDark ? '#d1d5db' : '#374151' } },
+                              series: [{
+                                type: 'pie',
+                                radius: ['70%', '90%'],
+                                center: ['50%', '45%'],
+                                avoidLabelOverlap: false,
+                                label: { show: false },
+                                data: [
+                                  { name: 'Encrypted', value: selectedAsset.encryptedVolume, itemStyle: { color: '#10b981' } },
+                                  { name: 'Plaintext', value: selectedAsset.plaintextVolume, itemStyle: { color: '#ef4444' } }
+                                ]
+                              }]
+                            }}
+                            style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: 'canvas' }}
+                          />
                         ) : (
                           <div className="h-full flex items-center justify-center text-gray-500">No traffic data</div>
                         )}
@@ -1054,20 +1284,40 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                       </h3>
                       <div className="h-64 w-full">
                         {selectedAsset.ja3Fingerprints.size > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart 
-                              layout="vertical" 
-                              data={Array.from(selectedAsset.ja3Fingerprints.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([hash, count]) => ({ hash, count }))}
-                              margin={{ top: 0, right: 30, left: 10, bottom: 0 }}
-                            >
-                              <XAxis type="number" hide />
-                              <YAxis type="category" dataKey="hash" stroke={isDark ? '#9ca3af' : '#4b5563'} axisLine={false} tickLine={false} width={100} tick={{ fontSize: 11, fontFamily: 'monospace' }} tickFormatter={(val) => val.length > 15 ? val.substring(0,15)+'...' : val} />
-                              <Tooltip cursor={{ fill: isDark ? '#374151' : '#f3f4f6' }} content={<CustomTooltip isDark={isDark} />} />
-                              <Bar dataKey="count" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={18}>
-                                <LabelList dataKey="count" position="right" fill={isDark ? '#9ca3af' : '#6b7280'} fontSize={12} />
-                              </Bar>
-                            </BarChart>
-                          </ResponsiveContainer>
+                          <ReactECharts 
+                            option={{
+                              tooltip: {
+                                trigger: 'axis',
+                                axisPointer: { type: 'shadow' },
+                                backgroundColor: isDark ? '#111827' : '#ffffff',
+                                borderColor: isDark ? '#374151' : '#e5e7eb',
+                                textStyle: { color: isDark ? '#d1d5db' : '#374151' }
+                              },
+                              grid: { top: 0, right: 30, bottom: 0, left: 10, containLabel: true },
+                              xAxis: { type: 'value', show: false },
+                              yAxis: {
+                                type: 'category',
+                                data: Array.from(selectedAsset.ja3Fingerprints.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(d => d[0]),
+                                axisLabel: { 
+                                  color: isDark ? '#9ca3af' : '#4b5563', 
+                                  fontSize: 11, 
+                                  fontFamily: 'monospace',
+                                  formatter: (val: string) => val.length > 15 ? val.substring(0, 15) + '...' : val
+                                },
+                                axisLine: { show: false },
+                                axisTick: { show: false }
+                              },
+                              series: [{
+                                type: 'bar',
+                                data: Array.from(selectedAsset.ja3Fingerprints.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map(d => d[1]),
+                                itemStyle: { color: '#8b5cf6', borderRadius: [0, 4, 4, 0] },
+                                barWidth: 18,
+                                label: { show: true, position: 'right', color: isDark ? '#9ca3af' : '#6b7280', fontSize: 12 }
+                              }]
+                            }}
+                            style={{ height: '100%', width: '100%' }}
+                            opts={{ renderer: 'canvas' }}
+                          />
                         ) : (
                           <div className="h-full flex items-center justify-center text-gray-500 text-sm text-center">
                             <span>No TLS fingerprints detected.<br/>Ensure <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">ja3</code> and <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">ja4</code> meta keys are queried.</span>
@@ -1147,36 +1397,45 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                   Asset Landscape (Volume × Peer Count)
                 </h3>
                 <div className="h-80 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                      <XAxis 
-                        type="number" 
-                        dataKey="volume" 
-                        name="Volume" 
-                        tickFormatter={formatBytes} 
-                        stroke={isDark ? '#4b5563' : '#9ca3af'} 
-                        fontSize={12} 
-                      />
-                      <YAxis 
-                        type="number" 
-                        dataKey="peers" 
-                        name="Peers" 
-                        stroke={isDark ? '#4b5563' : '#9ca3af'} 
-                        fontSize={12} 
-                      />
-                      <ZAxis type="category" dataKey="ip" name="IP" />
-                      <Tooltip 
-                        cursor={{ strokeDasharray: '3 3' }} 
-                        content={<CustomTooltip isDark={isDark} />}
-                        formatter={(value: any, name: any) => name === 'Volume' ? formatBytes(value) : value}
-                      />
-                      <Legend />
-                      <Scatter name="Servers" data={assets.filter(a => a.role === 'server').map(a => ({ ip: a.ip, volume: a.totalVolume, peers: a.peers.size }))} fill="#3b82f6" />
-                      <Scatter name="Clients" data={assets.filter(a => a.role === 'client').map(a => ({ ip: a.ip, volume: a.totalVolume, peers: a.peers.size }))} fill="#10b981" />
-                      <Scatter name="Mixed" data={assets.filter(a => a.role === 'mixed').map(a => ({ ip: a.ip, volume: a.totalVolume, peers: a.peers.size }))} fill="#a855f7" />
-                      <Scatter name="Unknown" data={assets.filter(a => a.role === 'unknown').map(a => ({ ip: a.ip, volume: a.totalVolume, peers: a.peers.size }))} fill="#6b7280" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
+                  <ReactECharts 
+                    option={{
+                      tooltip: {
+                        backgroundColor: isDark ? '#111827' : '#ffffff',
+                        borderColor: isDark ? '#374151' : '#e5e7eb',
+                        textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                        formatter: (params: any) => {
+                          const data = params.data;
+                          return `IP: ${data[2]}<br/>Volume: ${formatBytes(data[0])}<br/>Peers: ${data[1]}`;
+                        }
+                      },
+                      legend: { textStyle: { color: isDark ? '#d1d5db' : '#374151' } },
+                      grid: { top: 30, right: 20, bottom: 20, left: 20, containLabel: true },
+                      xAxis: {
+                        type: 'value',
+                        name: 'Volume',
+                        nameLocation: 'middle',
+                        nameGap: 25,
+                        axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 12, formatter: (value: number) => formatBytes(value) },
+                        splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed' } }
+                      },
+                      yAxis: {
+                        type: 'value',
+                        name: 'Peers',
+                        nameLocation: 'middle',
+                        nameGap: 30,
+                        axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 12 },
+                        splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed' } }
+                      },
+                      series: [
+                        { name: 'Servers', type: 'scatter', itemStyle: { color: '#3b82f6' }, data: assets.filter(a => a.role === 'server').map(a => [a.totalVolume, a.peers.size, a.ip]) },
+                        { name: 'Clients', type: 'scatter', itemStyle: { color: '#10b981' }, data: assets.filter(a => a.role === 'client').map(a => [a.totalVolume, a.peers.size, a.ip]) },
+                        { name: 'Mixed', type: 'scatter', itemStyle: { color: '#a855f7' }, data: assets.filter(a => a.role === 'mixed').map(a => [a.totalVolume, a.peers.size, a.ip]) },
+                        { name: 'Unknown', type: 'scatter', itemStyle: { color: '#6b7280' }, data: assets.filter(a => a.role === 'unknown').map(a => [a.totalVolume, a.peers.size, a.ip]) }
+                      ]
+                    }}
+                    style={{ height: '100%', width: '100%' }}
+                    opts={{ renderer: 'canvas' }}
+                  />
                 </div>
               </div>
 
@@ -1186,21 +1445,58 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                   Service Portfolio (Top 20 Assets by Volume)
                 </h3>
                 <div className="h-96 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={servicePortfolioData} layout="vertical" margin={{ top: 20, right: 20, bottom: 20, left: 100 }}>
-                      <XAxis type="number" tickFormatter={formatBytes} stroke={isDark ? '#4b5563' : '#9ca3af'} fontSize={12} />
-                      <YAxis type="category" dataKey="ip" stroke={isDark ? '#4b5563' : '#9ca3af'} fontSize={12} width={100} />
-                      <Tooltip 
-                        content={<CustomTooltip isDark={isDark} />}
-                        formatter={(value: any) => formatBytes(value)}
-                      />
-                      <Legend />
-                      {topServices.map((svc, idx) => (
-                        <Bar key={svc} dataKey={svc} stackId="a" fill={COLORS[idx % COLORS.length]} />
-                      ))}
-                      <Bar dataKey="Other" stackId="a" fill={COLORS[10]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <ReactECharts 
+                    option={{
+                      tooltip: {
+                        trigger: 'axis',
+                        axisPointer: { type: 'shadow' },
+                        backgroundColor: isDark ? '#111827' : '#ffffff',
+                        borderColor: isDark ? '#374151' : '#e5e7eb',
+                        textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                        formatter: (params: any) => {
+                          let res = `<div class="font-semibold mb-1">${params[0].name}</div>`;
+                          params.forEach((p: any) => {
+                            if (p.value > 0) {
+                              res += `<div class="flex justify-between gap-4"><span style="color:${p.color}">${p.seriesName}</span><span class="font-mono">${formatBytes(Number(p.value))}</span></div>`;
+                            }
+                          });
+                          return res;
+                        }
+                      },
+                      legend: { type: 'scroll', top: 0, textStyle: { color: isDark ? '#d1d5db' : '#374151' } },
+                      grid: { top: 30, right: 20, bottom: 20, left: 100, containLabel: true },
+                      xAxis: { 
+                        type: 'value', 
+                        axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 12, formatter: (value: number) => formatBytes(value) },
+                        splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed' } }
+                      },
+                      yAxis: {
+                        type: 'category',
+                        data: servicePortfolioData.map(d => d.ip),
+                        axisLabel: { color: isDark ? '#4b5563' : '#9ca3af', fontSize: 12, width: 100, overflow: 'truncate' },
+                        axisLine: { show: false },
+                        axisTick: { show: false }
+                      },
+                      series: [
+                        ...topServices.map((svc, idx) => ({
+                          name: svc,
+                          type: 'bar',
+                          stack: 'total',
+                          data: servicePortfolioData.map(d => d[svc] || 0),
+                          itemStyle: { color: COLORS[idx % COLORS.length] }
+                        })),
+                        {
+                          name: 'Other',
+                          type: 'bar',
+                          stack: 'total',
+                          data: servicePortfolioData.map(d => d.Other || 0),
+                          itemStyle: { color: COLORS[10] }
+                        }
+                      ]
+                    }}
+                    style={{ height: '100%', width: '100%' }}
+                    opts={{ renderer: 'canvas' }}
+                  />
                 </div>
               </div>
             </div>

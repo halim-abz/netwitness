@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { GraphData, Node, Link, Session } from '../types';
+import { GraphData, Node } from '../types';
 import { asArray, firstOf } from '../lib/dataProcessor';
 
 export interface AssetService {
@@ -65,6 +65,9 @@ export interface Asset {
   filenames: Set<string>;
   actions: Map<string, number>;
   emails: Set<string>;
+  webDnsTlds: Map<string, number>;
+  webDnsActions: Map<string, number>;
+  webDnsErrors: Map<string, number>;
 }
 
 export function useAssetsData(data: GraphData) {
@@ -105,6 +108,9 @@ export function useAssetsData(data: GraphData) {
           filenames: new Set(),
           actions: new Map(),
           emails: new Set(),
+          webDnsTlds: new Map(),
+          webDnsActions: new Map(),
+          webDnsErrors: new Map(),
         });
       }
     });
@@ -153,6 +159,12 @@ export function useAssetsData(data: GraphData) {
         const filenames = asArray(session['filename.all']).map(String);
         const actions = asArray(session['action']).map(String);
         const emails = asArray(session['email.all']).map(String);
+        const tlds = asArray(session['tld']).map(String);
+        const errors = asArray(session['error']).map(String);
+
+        const isWebDns = services.some(s => ['80', '443', '8080', '8443', '53', 'http', 'https', 'tls', 'ssl', 'dns'].includes(s.toLowerCase())) ||
+                         tcpDstPorts.some(p => ['80', '443', '8080', '8443', '53'].includes(p)) ||
+                         udpDstPorts.some(p => ['53', '443'].includes(p));
 
         // Update Source (Client)
         if (srcAsset) {
@@ -204,6 +216,11 @@ export function useAssetsData(data: GraphData) {
           ciphers.forEach(c => srcAsset.ciphers.set(c, (srcAsset.ciphers.get(c) || 0) + 1));
           actions.forEach(a => srcAsset.actions.set(a, (srcAsset.actions.get(a) || 0) + 1));
 
+          if (isWebDns) {
+            tlds.forEach(t => srcAsset.webDnsTlds.set(t, (srcAsset.webDnsTlds.get(t) || 0) + 1));
+            actions.forEach(a => srcAsset.webDnsActions.set(a, (srcAsset.webDnsActions.get(a) || 0) + 1));
+            errors.forEach(e => srcAsset.webDnsErrors.set(e, (srcAsset.webDnsErrors.get(e) || 0) + 1));
+          }
 
           let peer = srcAsset.peers.get(dstId);
           if (!peer) { 
@@ -279,6 +296,12 @@ export function useAssetsData(data: GraphData) {
           ja3s.forEach(j => dstAsset.ja3Fingerprints.set(j, (dstAsset.ja3Fingerprints.get(j) || 0) + 1));
           ciphers.forEach(c => dstAsset.ciphers.set(c, (dstAsset.ciphers.get(c) || 0) + 1));
           actions.forEach(a => dstAsset.actions.set(a, (dstAsset.actions.get(a) || 0) + 1));
+
+          if (isWebDns) {
+            tlds.forEach(t => dstAsset.webDnsTlds.set(t, (dstAsset.webDnsTlds.get(t) || 0) + 1));
+            actions.forEach(a => dstAsset.webDnsActions.set(a, (dstAsset.webDnsActions.get(a) || 0) + 1));
+            errors.forEach(e => dstAsset.webDnsErrors.set(e, (dstAsset.webDnsErrors.get(e) || 0) + 1));
+          }
 
           let peer = dstAsset.peers.get(srcId);
           if (!peer) { 

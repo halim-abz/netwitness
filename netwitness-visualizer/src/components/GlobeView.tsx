@@ -19,7 +19,7 @@ import { formatBytes, formatNumber, formatDate } from '../lib/utils';
 import { getCountryCentroids } from '../lib/countryCentroids';
 import { useGlobe } from '../hooks/useGlobe';
 import { useTooltip } from '../hooks/useTooltip';
-import { processGlobeData } from '../lib/globeDataProcessor';
+import { processGlobeData, FeedItem } from '../lib/globeDataProcessor';
 
 // --- TYPES & INTERFACES ---
 
@@ -89,8 +89,8 @@ const GLOBE_CONFIG = {
 
 // --- TYPE GUARDS ---
 
-const isLinkItem = (item: any): item is Link => item && 'source' in item && 'target' in item;
-const isNodeItem = (item: any): item is Node => item && 'id' in item && !('source' in item);
+const isLinkItem = (item: unknown): item is Link => !!item && typeof item === 'object' && 'source' in item && 'target' in item;
+const isNodeItem = (item: unknown): item is Node => !!item && typeof item === 'object' && 'id' in item && !('source' in item);
 
 // --- SUB-COMPONENTS ---
 
@@ -102,9 +102,9 @@ const LiveFeedItem = React.memo(({
   isSelected, 
   onClick 
 }: { 
-  item: any; 
+  item: FeedItem; 
   isSelected: boolean; 
-  onClick: (item: any) => void 
+  onClick: (item: FeedItem) => void 
 }) => {
   return (
     <div
@@ -237,7 +237,7 @@ export default function GlobeView({
     
     return countries.features.reduce((acc: GlobeLabelData[], feature: any) => {
       try {
-        const name = feature.properties?.NAME;
+        const name = feature.properties?.NAME || feature.properties?.ADMIN;
         if (!name) return acc;
         
         const centroid = countryCentroids.get(name.toLowerCase()) || {
@@ -328,8 +328,7 @@ export default function GlobeView({
     }
   }, [onSetHomeLocation]);
 
-  const handleFeedItemClick = useCallback((item: any) => {
-    const ringNode = ringsData.find(r => r.node.id === item.source) || ringsData.find(r => r.node.id === item.target);
+  const handleFeedItemClick = useCallback((item: FeedItem) => {
     // While clicking feed items, zoom to available node but select the link
     handleItemClick(item.link);
   }, [ringsData, handleItemClick]);
@@ -370,47 +369,53 @@ export default function GlobeView({
             polygonCapColor={() => isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)'}
             polygonSideColor={() => 'rgba(0, 100, 255, 0.15)'}
             polygonStrokeColor={() => isDark ? '#334155' : '#cbd5e1'}
-            onPolygonRightClick={(polygon: object, event: MouseEvent, { lat, lng }: any) => handleRightClick(lat, lng, event)}
+            onPolygonRightClick={(_: object, event: MouseEvent, { lat, lng }: { lat: number; lng: number }) => handleRightClick(lat, lng, event)}
             
             // Arcs
             arcsData={arcsData}
-            arcColor={(arc: any) => {
-              if (selectedItem === arc.link) return ['#bbf7d0', '#22c55e'];
-              const col = arc.color as string[];
-              return arc.isTrack ? [col[0] + '40', col[1] + '40'] : col;
+            arcColor={(arc: unknown) => {
+              const a = arc as GlobeArcData;
+              if (selectedItem === a.link) return ['#bbf7d0', '#22c55e'];
+              const col = a.color as string[];
+              return a.isTrack ? [col[0] + '40', col[1] + '40'] : col;
             }}
-            arcDashLength={(arc: any) => selectedItem === arc.link ? 1 : 0.4}
-            arcDashGap={(arc: any) => selectedItem === arc.link ? 0 : 4}
-            arcDashInitialGap={(arc: any) => selectedItem === arc.link ? 0 : Math.random() * 5}
+            arcDashLength={(arc: unknown) => selectedItem === (arc as GlobeArcData).link ? 1 : 0.4}
+            arcDashGap={(arc: unknown) => selectedItem === (arc as GlobeArcData).link ? 0 : 4}
+            arcDashInitialGap={(arc: unknown) => selectedItem === (arc as GlobeArcData).link ? 0 : Math.random() * 5}
             arcDashAnimateTime={GLOBE_CONFIG.animation.arcDashTime}
-            arcStroke={(arc: any) => selectedItem === arc.link ? 2 : (hoveredArc === arc.link ? 1.5 : (arc.isTrack ? 0.2 : 0.5))}
-            onArcHover={(arc: any) => {
-              setHoveredArc(arc?.link ?? null);
-              setHoveredItemNode(arc?.link ?? null);
-              if (arc) updateTooltipPosition();
+            arcStroke={(arc: unknown) => {
+              const a = arc as GlobeArcData;
+              return selectedItem === a.link ? 2 : (hoveredArc === a.link ? 1.5 : (a.isTrack ? 0.2 : 0.5));
             }}
-            onArcClick={(arc: any) => handleItemClick(arc.link)}
-            onArcRightClick={(arc: any, event: any, { lat, lng }: any) => handleRightClick(lat, lng, event)}
+            onArcHover={(arc: unknown) => {
+              const a = arc as GlobeArcData | null;
+              setHoveredArc(a?.link ?? null);
+              setHoveredItemNode(a?.link ?? null);
+              if (a) updateTooltipPosition();
+            }}
+            onArcClick={(arc: unknown) => handleItemClick((arc as GlobeArcData).link)}
+            onArcRightClick={(_: unknown, event: MouseEvent, { lat, lng }: { lat: number; lng: number }) => handleRightClick(lat, lng, event)}
             
             // Rings
             ringsData={ringsData}
-            ringColor={(ring: any) => checkSelectionMatch(ring.node.id) ? '#22c55e' : ring.color}
-            ringMaxRadius={(ring: any) => checkSelectionMatch(ring.node.id) ? GLOBE_CONFIG.radius.selectedNode : GLOBE_CONFIG.radius.defaultNode}
+            ringColor={(ring: unknown) => checkSelectionMatch((ring as GlobeRingData).node.id) ? '#22c55e' : (ring as GlobeRingData).color}
+            ringMaxRadius={(ring: unknown) => checkSelectionMatch((ring as GlobeRingData).node.id) ? GLOBE_CONFIG.radius.selectedNode : GLOBE_CONFIG.radius.defaultNode}
             ringPropagationSpeed={GLOBE_CONFIG.animation.ringPropagationSpeed}
             ringRepeatPeriod={GLOBE_CONFIG.animation.ringRepeatPeriod}
             ringAltitude={GLOBE_CONFIG.altitude.ring}
  
             // Points
             pointsData={ringsData}
-            pointColor={(pt: any) => checkSelectionMatch(pt.node.id) ? '#22c55e' : pt.color}
-            pointAltitude={(pt: any) => Math.min(0.15, 0.025 + (pt.degree ?? 0) * 0.005)}
-            pointRadius={(pt: any) => checkSelectionMatch(pt.node.id) ? 1.0 : 0.5}
-            onPointHover={(pt: any) => {
-              setHoveredItemNode(pt?.node ?? null);
-              if (pt) updateTooltipPosition();
+            pointColor={(pt: unknown) => checkSelectionMatch((pt as GlobeRingData).node.id) ? '#22c55e' : (pt as GlobeRingData).color}
+            pointAltitude={(pt: unknown) => Math.min(0.15, 0.025 + ((pt as GlobeRingData).degree ?? 0) * 0.005)}
+            pointRadius={(pt: unknown) => checkSelectionMatch((pt as GlobeRingData).node.id) ? 1.0 : 0.5}
+            onPointHover={(pt: unknown) => {
+              const p = pt as GlobeRingData | null;
+              setHoveredItemNode(p?.node ?? null);
+              if (p) updateTooltipPosition();
             }}
-            onPointClick={(pt: any) => handleItemClick(pt.node)}
-            onPointRightClick={(pt: any, event: any, { lat, lng }: any) => handleRightClick(lat, lng, event)}
+            onPointClick={(pt: unknown) => handleItemClick((pt as GlobeRingData).node)}
+            onPointRightClick={(_: unknown, event: MouseEvent, { lat, lng }: { lat: number; lng: number }) => handleRightClick(lat, lng, event)}
             
             // Labels
             labelsData={labelsData}
@@ -422,11 +427,11 @@ export default function GlobeView({
             labelAltitude={GLOBE_CONFIG.altitude.label}
             labelDotRadius={GLOBE_CONFIG.radius.labelDot}
             labelResolution={2}
-            onLabelClick={(lbl: any) => handleItemClick(lbl.node ?? null)}
-            onLabelRightClick={(lbl: any, event: any, { lat, lng }: any) => handleRightClick(lat, lng, event)}
+            onLabelClick={(lbl: unknown) => handleItemClick((lbl as GlobeLabelData).node ?? null)}
+            onLabelRightClick={(_: unknown, event: MouseEvent, { lat, lng }: { lat: number; lng: number }) => handleRightClick(lat, lng, event)}
             
             // Global Events
-            onGlobeRightClick={({ lat, lng }: any, event: MouseEvent) => handleRightClick(lat, lng, event)}
+            onGlobeRightClick={({ lat, lng }: { lat: number; lng: number }, event: MouseEvent) => handleRightClick(lat, lng, event)}
             onGlobeReady={() => {
               if (!selectedItem) {
                 setTimeout(() => {

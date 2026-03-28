@@ -1,7 +1,6 @@
 /**
  * NetworkGraph.tsx
- * 
- * This component renders a 2D force-directed graph of network connections using D3.js.
+ * * This component renders a 2D force-directed graph of network connections using D3.js.
  * It visualizes relationships between IP addresses and their associated attributes
  * (e.g., services, countries, organizations).
  * Key features include:
@@ -11,13 +10,30 @@
  * - Legend for attribute filtering and display toggling.
  */
 
-import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { renderToString } from "react-dom/server";
 import * as d3 from "d3";
 import { GraphData, Node, Link } from "../types";
-import { ChevronDown, ChevronUp, Filter, Network, Activity } from "lucide-react";
+import { 
+  ChevronDown, ChevronUp, Filter, Network, Activity,
+  Monitor, Server, AppWindow, Router, Globe, Building, User, Mail, MapPin, FileText, Hash,
+  Target, Zap, AlertCircle, Lock
+} from "lucide-react";
 import { formatBytes } from "../lib/utils";
 import { useTooltip } from "../hooks/useTooltip";
 import { filterAndAugmentGraph } from "../lib/graphFilters";
+
+// ==========================================
+// PERSISTENCE CACHE
+// Prevents layout, zoom, and filters from resetting 
+// across data refreshes or temporary unmounts.
+// ==========================================
+const persistenceCache = {
+  zoom: null as d3.ZoomTransform | null,
+  nodePositions: new Map<string, {x?: number, y?: number, fx?: number | null, fy?: number | null}>(),
+  attributeFilters: {} as Record<string, string>,
+  expandedFilters: {} as Record<string, boolean>
+};
 
 // ==========================================
 // TYPES & INTERFACES
@@ -34,7 +50,6 @@ export interface NetworkGraphProps {
   selectedItem: Node | Link | null;
 }
 
-// Extend base types with D3 simulation properties for strict type safety
 interface GraphNode extends Node, d3.SimulationNodeDatum {
   type: string;
   networkType?: "internal" | "public" | "unknown";
@@ -43,6 +58,7 @@ interface GraphNode extends Node, d3.SimulationNodeDatum {
   country?: string;
   org?: string;
   attributes?: Record<string, string[]>;
+  role?: "client" | "server" | "mixed"; // Added for tooltip
 }
 
 interface GraphLink extends Omit<Link, 'source' | 'target'>, d3.SimulationLinkDatum<GraphNode> {
@@ -78,6 +94,30 @@ const PHYSICS_CONFIG = {
 // UTILITY FUNCTIONS
 // ==========================================
 
+const getIconSvg = (type: string, attrType?: string) => {
+  let Icon = Hash;
+  if (type === 'client') Icon = Monitor;
+  else if (type === 'server') Icon = Server;
+  else if (type === 'mixed') Icon = Network;
+  else if (type === 'attribute') {
+    const attr = attrType?.toLowerCase() || '';
+    if (attr === 'domain' || attr === 'alias.host' || attr === 'tld') Icon = Globe;
+    else if (attr === 'org') Icon = Building;
+    else if (attr === 'user.all') Icon = User;
+    else if (attr === 'email.all') Icon = Mail;
+    else if (attr === 'country') Icon = MapPin;
+    else if (attr === 'filename.all' || attr === 'filename.all' || attr === 'filetype' || attr === 'extension') Icon = FileText;
+    else if (attr === 'client') Icon = AppWindow;
+    else if (attr === 'server') Icon = Router;
+    else if (attr === 'ioc' || attr === 'boc' || attr === 'eoc') Icon = Target;
+    else if (attr === 'action') Icon = Zap;
+    else if (attr === 'error') Icon = AlertCircle;
+    else if (attr === 'crypto' || attr === 'ssl.ca' || attr === 'ssl.subject') Icon = Lock;
+    else Icon = Hash;
+  }
+  return renderToString(<Icon size={24} strokeWidth={1.5} />);
+};
+
 const getColor = (attr: string, availableAttributes: string[]): string => {
   const index = availableAttributes.indexOf(attr);
   return CATEGORY_COLORS[Math.max(0, index) % CATEGORY_COLORS.length];
@@ -107,8 +147,14 @@ export default function NetworkGraph({
   const currentZoomRef = useRef<d3.ZoomTransform | null>(null);
   
   const [isLegendOpen, setIsLegendOpen] = useState(true);
-  const [attributeFilters, setAttributeFilters] = useState<Record<string, string>>({});
-  const [expandedFilters, setExpandedFilters] = useState<Record<string, boolean>>({});
+  
+  // Initialize state from cache
+  const [attributeFilters, setAttributeFilters] = useState<Record<string, string>>(persistenceCache.attributeFilters);
+  const [expandedFilters, setExpandedFilters] = useState<Record<string, boolean>>(persistenceCache.expandedFilters);
+
+  // Sync state to cache
+  useEffect(() => { persistenceCache.attributeFilters = attributeFilters; }, [attributeFilters]);
+  useEffect(() => { persistenceCache.expandedFilters = expandedFilters; }, [expandedFilters]);
   
   const {
     hoveredItem,
@@ -121,12 +167,25 @@ export default function NetworkGraph({
   // --- DATA PIPELINE ---
   
   const { augmentedNodes, augmentedLinks, nodeDegree, adjacencyMap } = useMemo(() => {
-    return filterAndAugmentGraph(data, displayedAttributes, attributeFilters) as {
+    const result = filterAndAugmentGraph(data, displayedAttributes, attributeFilters) as {
       augmentedNodes: GraphNode[];
       augmentedLinks: GraphLink[];
       nodeDegree: Map<string, number>;
       adjacencyMap: Map<string, Set<string>>;
     };
+
+    // Restore node positions from cache to prevent layout scrambling on new queries
+    result.augmentedNodes.forEach(node => {
+      const cachedPos = persistenceCache.nodePositions.get(node.id);
+      if (cachedPos) {
+        node.x = cachedPos.x;
+        node.y = cachedPos.y;
+        node.fx = cachedPos.fx;
+        node.fy = cachedPos.fy;
+      }
+    });
+
+    return result;
   }, [data, displayedAttributes, attributeFilters]);
 
   const getNodeSize = useCallback((d: GraphNode) => {
@@ -155,12 +214,15 @@ export default function NetworkGraph({
       .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) => {
         g.attr("transform", event.transform.toString());
         currentZoomRef.current = event.transform; 
+        persistenceCache.zoom = event.transform; // Save to cache
       });
 
     svg.call(zoom);
 
-    if (currentZoomRef.current) {
-      svg.call(zoom.transform, currentZoomRef.current);
+    // Apply cached zoom or initialize
+    if (persistenceCache.zoom) {
+      svg.call(zoom.transform, persistenceCache.zoom);
+      currentZoomRef.current = persistenceCache.zoom;
     } else {
       const initialTransform = d3.zoomIdentity
         .translate(width / 2 * (1 - PHYSICS_CONFIG.INITIAL_ZOOM), height / 2 * (1 - PHYSICS_CONFIG.INITIAL_ZOOM))
@@ -220,7 +282,7 @@ export default function NetworkGraph({
         event.stopPropagation();
         onLinkClick(d as unknown as Link);
       })
-      .on("mouseenter", (event: MouseEvent, d) => {
+      .on("mouseenter", (_, d) => {
         setHoveredItem(d);
         updateTooltipPosition();
       })
@@ -239,7 +301,30 @@ export default function NetworkGraph({
       .attr("dy", -5)
       .text(d => d.services ? d.services.join(", ") : "");
 
-    // 6. Draw Vertices (Nodes)
+    // 6. Draw Vertices (Nodes) & Map Roles
+    const nodeRoles = new Map<string, 'client' | 'server' | 'mixed'>();
+    augmentedLinks.forEach(l => {
+      if (l.type !== "attribute") {
+        const sId = resolveId(l.source);
+        const tId = resolveId(l.target);
+        
+        const sRole = nodeRoles.get(sId);
+        if (sRole === 'server') nodeRoles.set(sId, 'mixed');
+        else if (!sRole) nodeRoles.set(sId, 'client');
+
+        const tRole = nodeRoles.get(tId);
+        if (tRole === 'client') nodeRoles.set(tId, 'mixed');
+        else if (!tRole) nodeRoles.set(tId, 'server');
+      }
+    });
+
+    // Save roles to nodes for the tooltip
+    augmentedNodes.forEach(n => {
+      if (n.type !== "attribute") {
+        n.role = nodeRoles.get(n.id) || "mixed";
+      }
+    });
+
     const drag = d3.drag<SVGGElement, GraphNode>()
       .on("start", (event, d) => {
         if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -272,7 +357,7 @@ export default function NetworkGraph({
         event.stopPropagation();
         onNodeClick(d as unknown as Node);
       })
-      .on("mouseenter", (event: MouseEvent, d) => {
+      .on("mouseenter", (_, d) => {
         setHoveredItem(d);
         updateTooltipPosition();
       })
@@ -282,19 +367,33 @@ export default function NetworkGraph({
       const el = d3.select(this);
       const size = getNodeSize(d);
       
+      const role = d.type === "attribute" ? "attribute" : (nodeRoles.get(d.id) || "mixed");
+      const iconSvg = getIconSvg(role, d.attrType);
+      
       if (d.type === "attribute") {
         el.append("rect")
+          .attr("class", "node-bg")
           .attr("width", size * 2)
           .attr("height", size * 2)
           .attr("x", -size)
           .attr("y", -size)
-          .attr("rx", 4)
-          .attr("transform", "rotate(45)")
-          .attr("stroke-width", 2);
+          .attr("rx", size * 0.35);
+          
+        el.append("rect")
+          .attr("class", "inner-highlight")
+          .attr("width", (size - 2) * 2)
+          .attr("height", (size - 2) * 2)
+          .attr("x", -(size - 2))
+          .attr("y", -(size - 2))
+          .attr("rx", (size - 2) * 0.35)
+          .attr("fill", "none")
+          .attr("stroke", "rgba(255,255,255,0.2)")
+          .attr("stroke-width", 1);
       } else {
         el.append("circle")
-          .attr("r", size)
-          .attr("stroke-width", 2);
+          .attr("class", "node-bg")
+          .attr("r", size);
+          
         el.append("circle")
           .attr("class", "inner-highlight")
           .attr("r", size - 2)
@@ -302,6 +401,12 @@ export default function NetworkGraph({
           .attr("stroke", "rgba(255,255,255,0.2)")
           .attr("stroke-width", 1);
       }
+
+      const iconSize = size * 1.2;
+      el.append("g")
+        .attr("class", "node-icon")
+        .attr("transform", `translate(${-iconSize/2}, ${-iconSize/2}) scale(${iconSize/24})`)
+        .html(iconSvg);
     });
 
     node.append("text")
@@ -345,13 +450,17 @@ export default function NetworkGraph({
         svg.attr("width", newWidth).attr("height", newHeight);
         simulation.force("center", d3.forceCenter(newWidth / 2, newHeight / 2));
         simulation.alpha(0.3).restart();
-      }, 150); // Debounced
+      }, 150); 
     });
 
     resizeObserver.observe(containerRef.current);
 
     return () => {
       simulation.stop();
+      // Save exact positions to cache on unmount/re-render
+      augmentedNodes.forEach(n => {
+        persistenceCache.nodePositions.set(n.id, { x: n.x, y: n.y, fx: n.fx, fy: n.fy });
+      });
       resizeObserver.disconnect();
       clearTimeout(resizeTimer);
     };
@@ -374,15 +483,30 @@ export default function NetworkGraph({
       const el = d3.select(this);
       if (d.type === "attribute") {
         const color = getColor(d.attrType || "default", availableAttributes);
-        el.select("rect").attr("fill", color).attr("stroke", isDark ? "#0f172a" : "#ffffff")
-          .style("filter", `drop-shadow(0 0 6px ${color}80)`);
+        el.select(".node-bg")
+          .attr("fill", color) 
+          .attr("stroke", isDark ? "#0f172a" : "#ffffff") 
+          .attr("stroke-width", 2)
+          .attr("stroke-dasharray", "none")
+          .style("filter", `drop-shadow(0 0 8px ${color}80)`);
+          
+        el.select(".node-icon")
+          .style("color", "#ffffff"); 
       } else {
         const color = d.networkType === "public" ? "#BE3B37" : (d.networkType === "internal" ? (isDark ? "#0ea5e9" : "#3b82f6") : "#64748b");
-        el.select("circle").attr("fill", color).attr("stroke", isDark ? "#0f172a" : "#ffffff")
+        el.select(".node-bg")
+          .attr("fill", color)
+          .attr("stroke", isDark ? "#0f172a" : "#ffffff")
+          .attr("stroke-width", 2)
+          .attr("stroke-dasharray", "none")
           .style("filter", `drop-shadow(0 0 8px ${color}80)`);
+          
+        el.select(".node-icon")
+          .style("color", "#ffffff");
       }
+      
       el.select("text")
-        .attr("fill", d.type === "attribute" ? (isDark ? "#94a3b8" : "#64748b") : (isDark ? "#e2e8f0" : "#334155"))
+        .attr("fill", isDark ? "#e2e8f0" : "#334155")
         .attr("stroke", isDark ? "#0f172a" : "#ffffff");
     });
 
@@ -396,15 +520,18 @@ export default function NetworkGraph({
 
     linkLabels.attr("fill", isDark ? "#94a3b8" : "#64748b");
 
-    // Selection Fading Logic
+    // Selection Fading Logic with Hop 2 Expansion
     if (!selectedItem) {
       nodes.style("opacity", 1).style("transition", "opacity 0.3s");
-      nodes.selectAll("circle:first-child, rect").attr("stroke", isDark ? "#0f172a" : "#ffffff").attr("stroke-width", 2);
+      // Prevent resetting the attribute node colors when nothing is selected
+      nodes.selectAll(".node-bg")
+        .attr("stroke", isDark ? "#0f172a" : "#ffffff")
+        .attr("stroke-width", 2);
       links.style("opacity", d => d.type === "attribute" ? 0.6 : 0.8).style("transition", "opacity 0.3s");
       linkLabels.style("opacity", 1).style("transition", "opacity 0.3s");
     } else {
       const visibleNodeIds = new Set<string>();
-      const focusedNodeIds = new Set<string>();
+      const focusedNodeIds = new Set<string>(); // Tracks strictly the clicked item(s)
       
       const isLinkSelection = "source" in selectedItem;
       
@@ -417,35 +544,68 @@ export default function NetworkGraph({
         const selectedId = selectedItem.id;
         visibleNodeIds.add(selectedId);
         focusedNodeIds.add(selectedId);
+        
+        // Hop 1: Add all immediate neighbors (IPs or Attributes connected directly to the selected node)
         const connectedIds = adjacencyMap.get(selectedId) || new Set<string>();
         connectedIds.forEach(id => visibleNodeIds.add(id));
       }
 
+      // Hop 2: Expand visibility to any Attribute Node connected to our current visible set
+      const expandedAttributeNodeIds = new Set<string>();
+      
       augmentedLinks.forEach(l => {
         if (l.type === "attribute") {
-          const sId = resolveId(l.source);
-          const tId = resolveId(l.target);
-          if (focusedNodeIds.has(sId)) visibleNodeIds.add(tId);
-          if (focusedNodeIds.has(tId)) visibleNodeIds.add(sId);
+          const sourceNode = l.source as GraphNode;
+          const targetNode = l.target as GraphNode;
+          const sId = resolveId(sourceNode);
+          const tId = resolveId(targetNode);
+          
+          // Strict check: Only add the target if it is genuinely an attribute node.
+          // This prevents pulling in secondary IP_Nodes by accident.
+          if (visibleNodeIds.has(sId) && targetNode.type === "attribute") {
+            expandedAttributeNodeIds.add(tId);
+          }
+          if (visibleNodeIds.has(tId) && sourceNode.type === "attribute") {
+            expandedAttributeNodeIds.add(sId);
+          }
         }
       });
+      
+      // Merge the expanded attributes into the main visibility set
+      expandedAttributeNodeIds.forEach(id => visibleNodeIds.add(id));
 
+      // Apply Node Opacity
       nodes.style("opacity", d => visibleNodeIds.has(d.id) ? 1 : 0.1).style("transition", "opacity 0.3s");
-      nodes.selectAll("circle:first-child, rect")
-        .attr("stroke", (d: any) => focusedNodeIds.has(d.id) ? "#f59e0b" : (isDark ? "#0f172a" : "#ffffff"))
+      
+      // Apply Node Highlighting (Only directly clicked nodes get the amber border)
+      nodes.selectAll(".node-bg")
+        .attr("stroke", (d: any) => {
+          if (focusedNodeIds.has(d.id)) return "#f59e0b";
+          return isDark ? "#0f172a" : "#ffffff";
+        })
         .attr("stroke-width", (d: any) => focusedNodeIds.has(d.id) ? 3 : 2);
       
+      // Apply Link Opacity
       links.style("opacity", d => {
         const sId = resolveId(d.source);
         const tId = resolveId(d.target);
+        
+        // Keep primary IP connections or strictly selected links solid
         if (isLinkSelection) {
            if (sId === resolveId((selectedItem as any).source) && tId === resolveId((selectedItem as any).target)) return 0.8;
         } else {
            if (sId === selectedItem.id || tId === selectedItem.id) return 0.8;
         }
-        return (d.type === "attribute" && (focusedNodeIds.has(sId) || focusedNodeIds.has(tId))) ? 0.6 : 0.05;
+        
+        // Show attribute links if BOTH ends of the link are now in our visible set
+        if (d.type === "attribute" && visibleNodeIds.has(sId) && visibleNodeIds.has(tId)) {
+           return 0.6;
+        }
+        
+        return 0.05;
       }).style("transition", "opacity 0.3s");
       
+      // Apply Label Opacity
       linkLabels.style("opacity", d => {
         const sId = resolveId(d.source);
         const tId = resolveId(d.target);
@@ -636,6 +796,7 @@ const GraphTooltip = ({ tooltipRef, lastHoveredItem, isDark, availableAttributes
             <div className="flex justify-between gap-4"><span className="text-gray-500">Type:</span><span className="font-semibold capitalize">{lastHoveredItem.attrType}</span></div>
           ) : (
             <>
+              <div className="flex justify-between gap-4"><span className="text-gray-500">Role:</span><span className="font-semibold capitalize">{lastHoveredItem.role || 'mixed'}</span></div>
               <div className="flex justify-between gap-4"><span className="text-gray-500">Network:</span><span className="font-semibold capitalize">{lastHoveredItem.networkType}</span></div>
               {lastHoveredItem.country && <div className="flex justify-between gap-4"><span className="text-gray-500">Country:</span><span className="font-semibold">{lastHoveredItem.country}</span></div>}
               {lastHoveredItem.org && <div className="flex justify-between gap-4"><span className="text-gray-500">Org:</span><span className="font-semibold truncate max-w-[150px]">{lastHoveredItem.org}</span></div>}

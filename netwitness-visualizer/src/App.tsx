@@ -7,17 +7,18 @@
  * via the processData utility.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import Sidebar from "./components/Sidebar";
 import NetworkGraph from "./components/NetworkGraph";
 import GlobeView from "./components/GlobeView";
 import ThreatNews from "./components/ThreatNews";
 import AssetsView from "./components/AssetsView";
 import AlertsDashboard from "./components/AlertsDashboard";
+import CustomDashboard from "./components/CustomDashboard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import DetailsPanel from "./components/DetailsPanel";
 import { Node, Link } from "./types";
-import { AlertCircle, Settings, Moon, Sun, Globe, Network, Newspaper, Server, ShieldAlert } from "lucide-react";
+import { AlertCircle, Settings, Moon, Sun, Globe, Network, Newspaper, Server, ShieldAlert, LayoutDashboard } from "lucide-react";
 import { processData } from "./lib/dataProcessor";
 import { useNetWitnessQuery } from "./hooks/useNetWitnessQuery";
 
@@ -28,7 +29,7 @@ export interface Coordinates {
   lng: number;
 }
 
-type ViewMode = 'graph' | 'globe' | 'news' | 'assets' | 'alerts';
+type ViewMode = 'graph' | 'globe' | 'news' | 'assets' | 'alerts' | 'dashboard';
 
 // --- CONSTANTS & CONFIG ---
 
@@ -39,13 +40,15 @@ const ENABLE_GLOBE = import.meta.env.VITE_ENABLE_GLOBE !== 'false';
 const ENABLE_NEWS = import.meta.env.VITE_ENABLE_NEWS !== 'false';
 const ENABLE_ASSETS = import.meta.env.VITE_ENABLE_ASSETS !== 'false';
 const ENABLE_ALERTS = import.meta.env.VITE_ENABLE_ALERTS !== 'false';
+const ENABLE_DASHBOARD = import.meta.env.VITE_ENABLE_DASHBOARD !== 'false';
 const FALLBACK_NAVIGATE_URL = import.meta.env.VITE_NW_NAVIGATE_URL;
 
 const VIEW_MODES = [
+  { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: ENABLE_DASHBOARD },
+  { id: 'alerts', icon: ShieldAlert, label: 'Alerts', enabled: ENABLE_ALERTS },
   { id: 'assets', icon: Server, label: 'Assets', enabled: ENABLE_ASSETS },
   { id: 'graph', icon: Network, label: 'Graph', enabled: ENABLE_GRAPH },
   { id: 'globe', icon: Globe, label: 'Globe', enabled: ENABLE_GLOBE },
-  { id: 'alerts', icon: ShieldAlert, label: 'Alerts', enabled: ENABLE_ALERTS },
   { id: 'news', icon: Newspaper, label: 'News', enabled: ENABLE_NEWS },
 ] as const;
 
@@ -56,22 +59,24 @@ const getDefaultViewMode = (): ViewMode => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view');
+      if (view === 'dashboard' && ENABLE_DASHBOARD) return 'dashboard';
+      if (view === 'alerts' && ENABLE_ALERTS) return 'alerts';
       if (view === 'assets' && ENABLE_ASSETS) return 'assets';
       if (view === 'graph' && ENABLE_GRAPH) return 'graph';
       if (view === 'globe' && ENABLE_GLOBE) return 'globe';
-      if (view === 'alerts' && ENABLE_ALERTS) return 'alerts';
       if (view === 'news' && ENABLE_NEWS) return 'news';
     }
   } catch {
     // Ignore URL parsing errors, fallback to defaults
   }
   
+  if (ENABLE_DASHBOARD) return 'dashboard';
+  if (ENABLE_ALERTS) return 'alerts';
   if (ENABLE_ASSETS) return 'assets';
   if (ENABLE_GRAPH) return 'graph';
   if (ENABLE_GLOBE) return 'globe';
-  if (ENABLE_ALERTS) return 'alerts';
   if (ENABLE_NEWS) return 'news';
-  return 'assets';
+  return 'dashboard';
 };
 
 const getDefaultHomeLocation = (): Coordinates | null => {
@@ -174,7 +179,7 @@ export default function App() {
   // --- REUSABLE UI ELEMENTS ---
 
   // Pre-construct the details panel to avoid JSX duplication
-  const detailsPanelElement = selectedItem && viewMode !== 'news' && viewMode !== 'assets' && viewMode !== 'alerts' ? (
+  const detailsPanelElement = selectedItem && viewMode !== 'news' && viewMode !== 'assets' && viewMode !== 'alerts' && viewMode !== 'dashboard' ? (
     <DetailsPanel
       selectedItem={selectedItem}
       onClose={() => setSelectedItem(null)}
@@ -217,6 +222,12 @@ export default function App() {
       <div 
         id="news-sidebar-portal" 
         className={isSidebarOpen && viewMode === 'news' ? "absolute inset-y-0 left-0 z-40 md:relative shadow-2xl md:shadow-none flex" : "hidden"} 
+      />
+
+      {/* Dashboard Portal */}
+      <div 
+        id="dashboard-sidebar-portal" 
+        className={isSidebarOpen && viewMode === 'dashboard' ? "absolute inset-y-0 left-0 z-40 md:relative shadow-2xl md:shadow-none flex" : "hidden"} 
       />
 
       <main className="flex-1 min-w-0 relative flex flex-col p-4">
@@ -303,6 +314,10 @@ export default function App() {
                 isDark={isDark}
                 queryTrigger={alertsConfig?.trigger || 0}
               />
+            </ErrorBoundary>
+          ) : viewMode === 'dashboard' ? (
+            <ErrorBoundary>
+              <CustomDashboard latestConfig={latestConfig} />
             </ErrorBoundary>
           ) : (
             <>

@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Activity, AlertTriangle, ArrowRight, Calendar, Check, ChevronRight, 
-  Clock, Copy, FileJson, Filter, Info, Search, Server, Shield, ShieldAlert, Target, X,
+  Activity, AlertTriangle, ArrowRight, Check, 
+  Clock, Copy, FileJson, Filter, Search, Server, Shield, ShieldAlert, Target, X,
   Globe, User, FileText, MapPin, Lock, Monitor
 } from 'lucide-react';
-import { 
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, 
-  ResponsiveContainer, Tooltip as RechartsTooltip, TooltipProps, XAxis, YAxis 
-} from 'recharts';
+import ReactECharts from 'echarts-for-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { MITRE_DICT } from '../lib/mitreDict';
 
@@ -153,51 +150,48 @@ const formatDateSafe = (alert: Partial<Alert>): string => {
 
 // --- Sub-Components (Extracted for performance) ---
 
-const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
-  if (active && payload && payload.length) {
-    const rawLabel = label || payload[0].name;
-    const displayLabel = /^[T][A\d]/.test(rawLabel) ? getMitreName(rawLabel) : rawLabel;
-    return (
-      <div className="bg-gray-900 text-white text-xs rounded shadow-lg p-2 border border-gray-800 z-50">
-        <p className="font-semibold mb-1">{displayLabel}</p>
-        <p className="text-gray-300">Count: <span className="text-white font-bold">{payload[0].value}</span></p>
-      </div>
-    );
-  }
-  return null;
-};
+const KPICard = ({ icon: Icon, label, value, color = "text-nw-red", trendData, trendColor = "#ef4444" }: { icon: React.ElementType, label: string, value: string | number, color?: string, trendData?: { value: number }[], trendColor?: string }) => {
+  const option = trendData && trendData.length > 0 ? {
+    grid: { top: 0, right: 0, bottom: 0, left: 0 },
+    xAxis: { type: 'category', show: false, data: trendData.map((_, i) => i) },
+    yAxis: { type: 'value', show: false, min: 'dataMin', max: 'dataMax' },
+    series: [{
+      data: trendData.map(d => d.value),
+      type: 'line',
+      smooth: true,
+      showSymbol: false,
+      lineStyle: { color: trendColor, width: 2, opacity: 0.3 },
+      areaStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: trendColor },
+            { offset: 1, color: 'rgba(255,255,255,0)' }
+          ]
+        },
+        opacity: 0.15
+      },
+      animation: false
+    }]
+  } : null;
 
-const TrendTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-gray-900 text-white text-xs rounded shadow-lg p-3 border border-gray-800 z-50 min-w-[120px]">
-        <p className="font-bold mb-2 pb-1 border-b border-gray-700">{label}</p>
-        {[...payload].reverse().map((entry, index) => (
-           <div key={index} className="flex justify-between items-center py-0.5 gap-4">
-             <div className="flex items-center gap-1.5">
-               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color || entry.stroke }} />
-               <span className="text-gray-300">{entry.name}</span>
-             </div>
-             <span className="font-semibold text-white">{entry.value}</span>
-           </div>
-        ))}
+  return (
+    <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-4 relative overflow-hidden">
+      {option && (
+        <div className="absolute inset-0 pointer-events-none opacity-50">
+          <ReactECharts option={option} style={{ height: '100%', width: '100%' }} opts={{ renderer: 'canvas' }} />
+        </div>
+      )}
+      <div className={`p-3 rounded-lg bg-gray-50 dark:bg-gray-800 ${color} relative z-10`}>
+        <Icon className="w-6 h-6" />
       </div>
-    );
-  }
-  return null;
+      <div className="relative z-10">
+        <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
+        <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+      </div>
+    </div>
+  );
 };
-
-const KPICard = ({ icon: Icon, label, value, color = "text-nw-red" }: { icon: React.ElementType, label: string, value: string | number, color?: string }) => (
-  <div className="bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800 flex items-center gap-4">
-    <div className={`p-3 rounded-lg bg-gray-50 dark:bg-gray-800 ${color}`}>
-      <Icon className="w-6 h-6" />
-    </div>
-    <div>
-      <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
-      <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
-    </div>
-  </div>
-);
 
 interface AlertDrawerProps {
   alert: Alert | null;
@@ -214,7 +208,7 @@ const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
   
   const event = alert.events?.[0] || {};
   
-  const eventGridData = Object.entries(event).filter(([key, value]) => {
+  const eventGridData = Object.entries(event).filter(([, value]) => {
     if (value === null || typeof value === 'object' || Array.isArray(value)) return false;
     if (typeof value === 'string' && value.length > 50) return false;
     return true;
@@ -315,16 +309,42 @@ const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-6 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
               {eventGridData.length > 0 ? (
-                eventGridData.map(([key, value]) => (
-                  <div key={key}>
-                    <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5 truncate" title={key}>
-                      {key.replace(/_/g, ' ')}
-                    </span>
-                    <span className="block text-sm font-semibold text-gray-900 dark:text-gray-200 truncate" title={String(value)}>
-                      {String(value)}
-                    </span>
-                  </div>
-                ))
+                eventGridData.map(([key, value]) => {
+                  const displayKey = key.replace(/_/g, ' ');
+                  const queryKey = key.replace(/_/g, '.');
+                  const queryValue = String(value);
+                  
+                  const isIPv4 = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(queryValue);
+                  const isIPv6 = /^[0-9a-fA-F:]+$/.test(queryValue) && queryValue.includes(':');
+                  const isNumber = !isNaN(Number(queryValue)) && queryValue.trim() !== '';
+                  const formattedValue = (isIPv4 || isIPv6 || isNumber) ? queryValue : `'${queryValue}'`;
+                  
+                  const baseUrl = (import.meta.env.VITE_NW_NAVIGATE_URL || 'https://nw-head-node/investigate/navigate').replace(/\/$/, '');
+                  const investigateUrl = `${baseUrl}/query/${encodeURIComponent(queryKey)}=${encodeURIComponent(formattedValue)}`;
+
+                  return (
+                    <div key={key} className="group relative">
+                      <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5 truncate" title={displayKey}>
+                        {displayKey}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="block text-sm font-semibold text-gray-900 dark:text-gray-200 truncate" title={queryValue}>
+                          {queryValue}
+                        </span>
+                        <a 
+                          href={investigateUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-nw-red"
+                          title={`Investigate ${queryKey} in NetWitness`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Search className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })
               ) : (
                 <div className="col-span-full text-sm text-gray-500">No scalar metadata found in event payload.</div>
               )}
@@ -451,7 +471,8 @@ export default function AlertsDashboard({ host, port, username, password, isDark
     return alerts.filter(alert => {
       let matchesSearch = true;
       if (lowerQuery) {
-        const searchStr = `${alert.moduleName} ${alert.id} ${alert.tactics?.join(' ')} ${alert.techniques?.join(' ')}`.toLowerCase();
+        const eventValues = alert.events?.flatMap(e => Object.values(e).map(v => String(v))).filter(Boolean).join(' ') || '';
+        const searchStr = `${alert.moduleName} ${alert.id} ${alert.tactics?.join(' ')} ${alert.techniques?.join(' ')} ${eventValues}`.toLowerCase();
         matchesSearch = searchStr.includes(lowerQuery);
       }
       
@@ -518,6 +539,19 @@ export default function AlertsDashboard({ host, port, username, password, isDark
     return Object.entries(countsByDate).map(([date, counts]) => ({ date, ...counts }));
   }, [filteredAlerts]);
 
+  const totalTrendData = useMemo(() => {
+    const data = volumeData.map(d => ({ value: d.Low + d.Medium + d.High + d.Critical }));
+    // Recharts needs at least 2 points to draw an area/line properly
+    if (data.length === 1) return [data[0], data[0]];
+    return data;
+  }, [volumeData]);
+
+  const criticalHighTrendData = useMemo(() => {
+    const data = volumeData.map(d => ({ value: d.High + d.Critical }));
+    if (data.length === 1) return [data[0], data[0]];
+    return data;
+  }, [volumeData]);
+
   const severityData = useMemo(() => {
     const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
     filteredAlerts.forEach(a => {
@@ -540,7 +574,11 @@ export default function AlertsDashboard({ host, port, username, password, isDark
       counts[name] = (counts[name] || 0) + 1;
     });
     return Object.entries(counts)
-      .map(([name, count]) => ({ name, count }))
+      .map(([name, count]) => ({ 
+        name: name.length > 25 ? name.substring(0, 25) + '...' : name, 
+        fullName: name,
+        count 
+      }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
   }, [filteredAlerts]);
@@ -557,6 +595,32 @@ export default function AlertsDashboard({ host, port, username, password, isDark
     });
     return Object.entries(counts)
       .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [filteredAlerts]);
+
+  const topAssetsData = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filteredAlerts.forEach(alert => {
+      if (Array.isArray(alert.events)) {
+        alert.events.forEach(e => {
+          const src = getSourceIdentity(e);
+          const dst = getDestIdentity(e);
+          if (src) {
+            counts[src] = (counts[src] || 0) + 1;
+          }
+          if (dst) {
+            counts[dst] = (counts[dst] || 0) + 1;
+          }
+        });
+      }
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ 
+        name: name.length > 20 ? name.substring(0, 20) + '...' : name, 
+        fullName: name,
+        count 
+      }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
   }, [filteredAlerts]);
@@ -615,8 +679,8 @@ export default function AlertsDashboard({ host, port, username, password, isDark
 
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard icon={AlertTriangle} label="Total Alerts" value={kpis.total} />
-          <KPICard icon={Activity} label="Critical / High" value={kpis.criticalHigh} color="text-red-500" />
+          <KPICard icon={AlertTriangle} label="Total Alerts" value={kpis.total} trendData={totalTrendData} trendColor="#3b82f6" />
+          <KPICard icon={Activity} label="Critical / High" value={kpis.criticalHigh} color="text-red-500" trendData={criticalHighTrendData} trendColor="#ef4444" />
           <KPICard icon={Shield} label="Unique Rules" value={kpis.uniqueRules} />
           <KPICard icon={Target} label="Top IP Triggered" value={kpis.topIP} />
         </div>
@@ -651,36 +715,39 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                 <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Alert Trends</h3>
                   <div className="flex-1 min-h-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={volumeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorLow" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={SEVERITY_COLORS[1]} stopOpacity={0.6}/>
-                            <stop offset="95%" stopColor={SEVERITY_COLORS[1]} stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="colorMedium" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={SEVERITY_COLORS[2]} stopOpacity={0.6}/>
-                            <stop offset="95%" stopColor={SEVERITY_COLORS[2]} stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="colorHigh" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={SEVERITY_COLORS[3]} stopOpacity={0.6}/>
-                            <stop offset="95%" stopColor={SEVERITY_COLORS[3]} stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="colorCritical" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor={SEVERITY_COLORS[4]} stopOpacity={0.6}/>
-                            <stop offset="95%" stopColor={SEVERITY_COLORS[4]} stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDark ? '#374151' : '#e5e7eb'} opacity={0.5} />
-                        <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
-                        <RechartsTooltip content={<TrendTooltip />} />
-                        <Area type="monotone" dataKey="Low" stackId="1" stroke={SEVERITY_COLORS[1]} strokeWidth={2} fill="url(#colorLow)" />
-                        <Area type="monotone" dataKey="Medium" stackId="1" stroke={SEVERITY_COLORS[2]} strokeWidth={2} fill="url(#colorMedium)" />
-                        <Area type="monotone" dataKey="High" stackId="1" stroke={SEVERITY_COLORS[3]} strokeWidth={2} fill="url(#colorHigh)" />
-                        <Area type="monotone" dataKey="Critical" stackId="1" stroke={SEVERITY_COLORS[4]} strokeWidth={2} fill="url(#colorCritical)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                    <ReactECharts 
+                      option={{
+                        tooltip: {
+                          trigger: 'axis',
+                          backgroundColor: isDark ? '#111827' : '#ffffff',
+                          borderColor: isDark ? '#374151' : '#e5e7eb',
+                          textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                          axisPointer: { type: 'cross', label: { backgroundColor: '#6a7985' } }
+                        },
+                        grid: { top: 10, right: 10, left: 10, bottom: 0, containLabel: true },
+                        xAxis: {
+                          type: 'category',
+                          boundaryGap: false,
+                          data: volumeData.map(d => d.date),
+                          axisLabel: { color: '#6b7280', fontSize: 11 },
+                          axisLine: { show: false },
+                          axisTick: { show: false }
+                        },
+                        yAxis: {
+                          type: 'value',
+                          axisLabel: { color: '#6b7280', fontSize: 11 },
+                          splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed', opacity: 0.5 } }
+                        },
+                        series: [
+                          { name: 'Low', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[1], data: volumeData.map(d => d.Low) },
+                          { name: 'Medium', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[2], data: volumeData.map(d => d.Medium) },
+                          { name: 'High', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[3], data: volumeData.map(d => d.High) },
+                          { name: 'Critical', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[4], data: volumeData.map(d => d.Critical) }
+                        ]
+                      }}
+                      style={{ height: '100%', width: '100%' }}
+                      opts={{ renderer: 'canvas' }}
+                    />
                   </div>
                 </div>
 
@@ -691,76 +758,179 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                     {severityData.length === 0 ? (
                       <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500">No Data</div>
                     ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={severityData}
-                            innerRadius="60%"
-                            outerRadius="80%"
-                            paddingAngle={5}
-                            dataKey="value"
-                            stroke="none"
-                          >
-                            {severityData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <RechartsTooltip content={<CustomTooltip />} />
-                        </PieChart>
-                      </ResponsiveContainer>
+                      <ReactECharts 
+                        option={{
+                          tooltip: {
+                            trigger: 'item',
+                            backgroundColor: isDark ? '#111827' : '#ffffff',
+                            borderColor: isDark ? '#374151' : '#e5e7eb',
+                            textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                            formatter: '{b}: {c} ({d}%)'
+                          },
+                          series: [
+                            {
+                              type: 'pie',
+                              radius: ['60%', '80%'],
+                              avoidLabelOverlap: false,
+                              label: { show: false, position: 'center' },
+                              emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold', color: isDark ? '#fff' : '#000' } },
+                              labelLine: { show: false },
+                              data: severityData.map(d => ({ value: d.value, name: d.name, itemStyle: { color: d.color } }))
+                            }
+                          ]
+                        }}
+                        style={{ height: '100%', width: '100%' }}
+                        opts={{ renderer: 'canvas' }}
+                      />
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Row 2: Top Alerts & MITRE */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-none h-[220px]">
+              {/* Row 2: Top Alerts, MITRE, & Assets */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-none h-[220px]">
                 
                 {/* Top Alert Names */}
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Top Signatures Triggered</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 truncate">Top Signatures Triggered</h3>
                   <div className="flex-1 min-h-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={topAlertsData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                        <XAxis type="number" hide />
-                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} width={120} />
-                        <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(156, 163, 175, 0.1)' }} />
-                        <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={16} onClick={handleBarClick as any} className="cursor-pointer">
-                          {topAlertsData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} className="hover:opacity-80 transition-opacity" />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <ReactECharts 
+                      option={{
+                        tooltip: {
+                          trigger: 'axis',
+                          axisPointer: { type: 'shadow' },
+                          backgroundColor: isDark ? '#111827' : '#ffffff',
+                          borderColor: isDark ? '#374151' : '#e5e7eb',
+                          textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                          formatter: (params: any) => {
+                            const param = params[0];
+                            const dataItem = topAlertsData[param.dataIndex];
+                            const displayLabel = /^[T][A\d]/.test(dataItem.fullName) ? getMitreName(dataItem.fullName) : dataItem.fullName;
+                            return `<div class="font-semibold mb-1">${displayLabel}</div><div class="text-gray-500">Count: <span class="font-bold text-gray-900 dark:text-white">${param.value}</span></div>`;
+                          }
+                        },
+                        grid: { top: 0, right: 20, bottom: 0, left: 0, containLabel: true },
+                        xAxis: { type: 'value', show: false },
+                        yAxis: {
+                          type: 'category',
+                          data: topAlertsData.map(d => d.name),
+                          axisLabel: { color: '#6b7280', fontSize: 11, width: 160, overflow: 'truncate' },
+                          axisLine: { show: false },
+                          axisTick: { show: false }
+                        },
+                        series: [
+                          {
+                            type: 'bar',
+                            data: topAlertsData.map((d, i) => ({ value: d.count, itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] } })),
+                            itemStyle: { borderRadius: [0, 4, 4, 0] },
+                            barWidth: 16
+                          }
+                        ]
+                      }}
+                      onEvents={{
+                        click: (params: any) => handleBarClick({ name: topAlertsData[params.dataIndex].fullName })
+                      }}
+                      style={{ height: '100%', width: '100%' }}
+                      opts={{ renderer: 'canvas' }}
+                    />
                   </div>
                 </div>
 
                 {/* MITRE Tactics */}
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Top MITRE Tactics</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 truncate">Top MITRE Tactics</h3>
                   <div className="flex-1 min-h-0">
                     {mitreData.length === 0 ? (
                       <div className="h-full flex items-center justify-center text-xs text-gray-500">No mapped tactics found.</div>
                     ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={mitreData} layout="vertical" margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                          <XAxis type="number" hide />
-                          <YAxis 
-                            dataKey="name" 
-                            type="category" 
-                            axisLine={false} 
-                            tickLine={false} 
-                            tick={{ fill: '#6b7280', fontSize: 11 }} 
-                            width={80} 
-                          />
-                          <RechartsTooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(156, 163, 175, 0.1)' }} />
-                          <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={16} onClick={handleBarClick as any} className="cursor-pointer">
-                            {mitreData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={CHART_COLORS[(index + 2) % CHART_COLORS.length]} className="hover:opacity-80 transition-opacity" />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
+                      <ReactECharts 
+                        option={{
+                          tooltip: {
+                            trigger: 'axis',
+                            axisPointer: { type: 'shadow' },
+                            backgroundColor: isDark ? '#111827' : '#ffffff',
+                            borderColor: isDark ? '#374151' : '#e5e7eb',
+                            textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                            formatter: (params: any) => {
+                              const param = params[0];
+                              const dataItem = mitreData[param.dataIndex];
+                              const displayLabel = /^[T][A\d]/.test(dataItem.name) ? getMitreName(dataItem.name) : dataItem.name;
+                              return `<div class="font-semibold mb-1">${displayLabel}</div><div class="text-gray-500">Count: <span class="font-bold text-gray-900 dark:text-white">${param.value}</span></div>`;
+                            }
+                          },
+                          grid: { top: 0, right: 20, bottom: 0, left: 0, containLabel: true },
+                          xAxis: { type: 'value', show: false },
+                          yAxis: {
+                            type: 'category',
+                            data: mitreData.map(d => d.name),
+                            axisLabel: { color: '#6b7280', fontSize: 11, width: 80, overflow: 'truncate' },
+                            axisLine: { show: false },
+                            axisTick: { show: false }
+                          },
+                          series: [
+                            {
+                              type: 'bar',
+                              data: mitreData.map((d, i) => ({ value: d.count, itemStyle: { color: CHART_COLORS[(i + 2) % CHART_COLORS.length] } })),
+                              itemStyle: { borderRadius: [0, 4, 4, 0] },
+                              barWidth: 16
+                            }
+                          ]
+                        }}
+                        onEvents={{
+                          click: (params: any) => handleBarClick({ name: mitreData[params.dataIndex].name })
+                        }}
+                        style={{ height: '100%', width: '100%' }}
+                        opts={{ renderer: 'canvas' }}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Top Impacted Assets */}
+                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 truncate">Top Impacted Assets</h3>
+                  <div className="flex-1 min-h-0">
+                    {topAssetsData.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-xs text-gray-500">No asset data found.</div>
+                    ) : (
+                      <ReactECharts 
+                        option={{
+                          tooltip: {
+                            trigger: 'axis',
+                            axisPointer: { type: 'shadow' },
+                            backgroundColor: isDark ? '#111827' : '#ffffff',
+                            borderColor: isDark ? '#374151' : '#e5e7eb',
+                            textStyle: { color: isDark ? '#d1d5db' : '#374151' },
+                            formatter: (params: any) => {
+                              const param = params[0];
+                              const dataItem = topAssetsData[param.dataIndex];
+                              return `<div class="font-semibold mb-1">${dataItem.fullName}</div><div class="text-gray-500">Count: <span class="font-bold text-gray-900 dark:text-white">${param.value}</span></div>`;
+                            }
+                          },
+                          grid: { top: 0, right: 20, bottom: 0, left: 0, containLabel: true },
+                          xAxis: { type: 'value', show: false },
+                          yAxis: {
+                            type: 'category',
+                            data: topAssetsData.map(d => d.name),
+                            axisLabel: { color: '#6b7280', fontSize: 11, width: 100, overflow: 'truncate' },
+                            axisLine: { show: false },
+                            axisTick: { show: false }
+                          },
+                          series: [
+                            {
+                              type: 'bar',
+                              data: topAssetsData.map((d, i) => ({ value: d.count, itemStyle: { color: CHART_COLORS[(i + 4) % CHART_COLORS.length] } })),
+                              itemStyle: { borderRadius: [0, 4, 4, 0] },
+                              barWidth: 16
+                            }
+                          ]
+                        }}
+                        onEvents={{
+                          click: (params: any) => handleBarClick({ name: topAssetsData[params.dataIndex].fullName })
+                        }}
+                        style={{ height: '100%', width: '100%' }}
+                        opts={{ renderer: 'canvas' }}
+                      />
                     )}
                   </div>
                 </div>
@@ -784,14 +954,14 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                 </div>
                 
                 <div className="flex-1 overflow-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse table-fixed">
                     <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/50 text-xs uppercase text-gray-500 dark:text-gray-400 z-10">
                       <tr>
-                        <th className="px-4 py-3 font-medium">Time</th>
-                        <th className="px-4 py-3 font-medium">Severity</th>
-                        <th className="px-4 py-3 font-medium">Name</th>
-                        <th className="px-4 py-3 font-medium">Source</th>
-                        <th className="px-4 py-3 font-medium">Dest</th>
+                        <th className="px-4 py-3 font-medium w-32">Time</th>
+                        <th className="px-4 py-3 font-medium w-24">Severity</th>
+                        <th className="px-4 py-3 font-medium w-64">Name</th>
+                        <th className="px-4 py-3 font-medium w-40">Source</th>
+                        <th className="px-4 py-3 font-medium w-40">Dest</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-800 text-sm">
@@ -813,10 +983,10 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                               onClick={() => setSelectedAlertDetails(alert)}
                               className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors group cursor-pointer"
                             >
-                              <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                              <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap truncate">
                                 {formatDateSafe(alert)}
                               </td>
-                              <td className="px-4 py-3">
+                              <td className="px-4 py-3 truncate">
                                 <span 
                                   className="px-2 py-1 rounded-md text-xs font-medium"
                                   style={{ 
@@ -828,7 +998,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                 </span>
                               </td>
                               <td className="px-4 py-3">
-                                <div className="font-medium text-gray-900 dark:text-gray-200 max-w-[200px] truncate" title={alert.moduleName}>
+                                <div className="font-medium text-gray-900 dark:text-gray-200 truncate" title={alert.moduleName}>
                                   {alert.moduleName}
                                 </div>
                                 {(alert.tactics?.length || alert.techniques?.length) ? (
@@ -836,7 +1006,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                     {alert.tactics?.map(tactic => (
                                       <span 
                                         key={tactic} 
-                                        title={getMitreName(tactic)}
+                                        title={`Tactic: ${getMitreName(tactic)}`}
                                         className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-[10px] font-semibold border border-blue-200 dark:border-blue-800 cursor-help"
                                       >
                                         {tactic}
@@ -845,7 +1015,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                     {alert.techniques?.map(tech => (
                                       <span 
                                         key={tech} 
-                                        title={getMitreName(tech)}
+                                        title={`Technique: ${getMitreName(tech)}`}
                                         className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded text-[10px] font-semibold border border-purple-200 dark:border-purple-800 cursor-help"
                                       >
                                         {tech}
@@ -854,21 +1024,23 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                   </div>
                                 ) : null}
                               </td>
-                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <td className="px-4 py-3 truncate" onClick={(e) => e.stopPropagation()}>
                                 {srcId ? (
                                   <button 
                                     onClick={() => setSelectedIP(srcId)}
-                                    className={`hover:text-nw-red transition-colors ${selectedIP === srcId ? 'text-nw-red font-semibold' : 'text-gray-600 dark:text-gray-300'}`}
+                                    className={`hover:text-nw-red transition-colors truncate w-full text-left ${selectedIP === srcId ? 'text-nw-red font-semibold' : 'text-gray-600 dark:text-gray-300'}`}
+                                    title={srcId}
                                   >
                                     {srcId}
                                   </button>
                                 ) : <span className="text-gray-500">-</span>}
                               </td>
-                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                              <td className="px-4 py-3 truncate" onClick={(e) => e.stopPropagation()}>
                                 {dstId ? (
                                   <button 
                                     onClick={() => setSelectedIP(dstId)}
-                                    className={`hover:text-nw-red transition-colors ${selectedIP === dstId ? 'text-nw-red font-semibold' : 'text-gray-600 dark:text-gray-300'}`}
+                                    className={`hover:text-nw-red transition-colors truncate w-full text-left ${selectedIP === dstId ? 'text-nw-red font-semibold' : 'text-gray-600 dark:text-gray-300'}`}
+                                    title={dstId}
                                   >
                                     {dstId}
                                   </button>
@@ -903,27 +1075,53 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                     const getField = (keys: string[]) => {
                       for (const k of keys) {
                         const val = firstEvent[k];
-                        if (val && val !== '-') return String(val);
+                        if (val && val !== '-') {
+                          return {
+                            key: k,
+                            value: Array.isArray(val) ? val : [String(val)]
+                          };
+                        }
                       }
                       return null;
                     };
 
                     // Extract requested context fields
-                    const domainStr = getField(['domain', 'domain_dst', 'domain_src']);
-                    const userStr = getField(['username', 'user_src', 'user_dst', 'ad_username_src', 'ad_username_dst']);
-                    const fileStr = getField(['filename', 'attachment']);
-                    const countrySrc = getField(['country_src']);
-                    const countryDst = getField(['country_dst']);
-                    const sslCaStr = getField(['ssl_ca']);
-                    const sslSubjectStr = getField(['ssl_subject']);
-                    const clientStr = getField(['client']);
+                    const domainObj = getField(['domain', 'domain_dst', 'domain_src']);
+                    const userObj = getField(['username', 'user_src', 'user_dst', 'ad_username_src', 'ad_username_dst']);
+                    const fileObj = getField(['filename', 'attachment']);
+                    const countrySrcObj = getField(['country_src']);
+                    const countryDstObj = getField(['country_dst']);
+                    const sslCaObj = getField(['ssl_ca']);
+                    const sslSubjectObj = getField(['ssl_subject']);
+                    const clientObj = getField(['client']);
+
+                    const formatTooltip = (obj: { key: string, value: string[] } | null, label: string) => {
+                      if (!obj) return '';
+                      const valuesStr = obj.value.length > 1 ? `\n  - ${obj.value.join('\n  - ')}` : ` ${obj.value[0]}`;
+                      return `${label}:${valuesStr}`;
+                    };
+
+                    const formatDisplay = (obj: { key: string, value: string[] } | null) => {
+                      if (!obj) return '';
+                      return obj.value.length > 1 ? `${obj.value[0]} (+${obj.value.length - 1})` : obj.value[0];
+                    };
+
+                    const domainStr = formatDisplay(domainObj);
+                    const userStr = formatDisplay(userObj);
+                    const fileStr = formatDisplay(fileObj);
+                    const sslCaStr = formatDisplay(sslCaObj);
+                    const sslSubjectStr = formatDisplay(sslSubjectObj);
+                    const clientStr = formatDisplay(clientObj);
 
                     // Format country (show direction if both exist and differ, else just show the one available)
                     let countryStr = null;
-                    if (countrySrc && countryDst && countrySrc !== countryDst) {
-                      countryStr = `${countrySrc} → ${countryDst}`;
-                    } else if (countrySrc || countryDst) {
-                      countryStr = countrySrc || countryDst;
+                    let countryTooltip = '';
+                    if (countrySrcObj && countryDstObj && countrySrcObj.value[0] !== countryDstObj.value[0]) {
+                      countryStr = `${countrySrcObj.value[0]} → ${countryDstObj.value[0]}`;
+                      countryTooltip = `Country: ${countrySrcObj.value[0]} → ${countryDstObj.value[0]}`;
+                    } else if (countrySrcObj || countryDstObj) {
+                      countryStr = countrySrcObj ? countrySrcObj.value[0] : (countryDstObj ? countryDstObj.value[0] : null);
+                      countryTooltip = formatTooltip(countrySrcObj || countryDstObj, 'Country');
                     }
                     
                     return (
@@ -939,7 +1137,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                         
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatDistanceToNow(getAlertTimeSafe(alert), { addSuffix: true })}
+                            {formatDistanceToNow(getAlertTimeSafe(alert), { addSuffix: true })} ({format(getAlertTimeSafe(alert), 'yyyy-MM-dd HH:mm:ss')})
                           </span>
                           <h4 className="text-sm font-medium text-gray-900 dark:text-white leading-tight">
                             {alert.moduleName}
@@ -951,7 +1149,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                 {alert.tactics?.map(tactic => (
                                     <span 
                                       key={tactic} 
-                                      title={getMitreName(tactic)}
+                                      title={`Tactic: ${getMitreName(tactic)}`}
                                       className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded text-[10px] font-semibold border border-blue-200 dark:border-blue-800 cursor-help"
                                     >
                                         {tactic}
@@ -960,7 +1158,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                 {alert.techniques?.map(tech => (
                                     <span 
                                       key={tech} 
-                                      title={getMitreName(tech)}
+                                      title={`Technique: ${getMitreName(tech)}`}
                                       className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded text-[10px] font-semibold border border-purple-200 dark:border-purple-800 cursor-help"
                                     >
                                         {tech}
@@ -973,43 +1171,43 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                           {(domainStr || userStr || fileStr || countryStr || sslCaStr || sslSubjectStr || clientStr) && (
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
                               {userStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700" title={userStr}>
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(userObj, 'User')}>
                                   <User className="w-3 h-3 flex-none" />
                                   <span className="truncate max-w-[120px]">{userStr}</span>
                                 </span>
                               )}
                               {domainStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700" title={domainStr}>
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(domainObj, 'Domain')}>
                                   <Globe className="w-3 h-3 flex-none" />
                                   <span className="truncate max-w-[120px]">{domainStr}</span>
                                 </span>
                               )}
                               {fileStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700" title={fileStr}>
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(fileObj, 'File')}>
                                   <FileText className="w-3 h-3 flex-none" />
                                   <span className="truncate max-w-[120px]">{fileStr}</span>
                                 </span>
                               )}
                               {countryStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700" title={countryStr}>
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={countryTooltip}>
                                   <MapPin className="w-3 h-3 flex-none" />
                                   <span className="truncate max-w-[120px]">{countryStr}</span>
                                 </span>
                               )}
                               {sslCaStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700" title={sslCaStr}>
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(sslCaObj, 'SSL CA')}>
                                   <Lock className="w-3 h-3 flex-none" />
                                   <span className="truncate max-w-[120px]">{sslCaStr}</span>
                                 </span>
                               )}
                               {sslSubjectStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700" title={sslSubjectStr}>
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(sslSubjectObj, 'SSL Subject')}>
                                   <Lock className="w-3 h-3 flex-none" />
                                   <span className="truncate max-w-[120px]">{sslSubjectStr}</span>
                                 </span>
                               )}
                               {clientStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700" title={clientStr}>
+                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(clientObj, 'Client')}>
                                   <Monitor className="w-3 h-3 flex-none" />
                                   <span className="truncate max-w-[120px]">{clientStr}</span>
                                 </span>

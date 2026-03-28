@@ -144,9 +144,20 @@ function augmentGraphData(
   const finalLinks: Link[] = links.map((l) => ({ ...l, type: GRAPH_CONSTANTS.LINK_TYPE_TRAFFIC }));
   const attributeNodesMap = new Set<string>();
 
+  const sourceIps = new Set<string>();
+  const destIps = new Set<string>();
+  links.forEach(l => {
+    sourceIps.add(getNodeId(l.source));
+    destIps.add(getNodeId(l.target));
+  });
+
   nodes.forEach((node) => {
     displayedAttributes.forEach((attr) => {
       if (attr === GRAPH_CONSTANTS.ATTR_SERVICE) return;
+
+      const attrLower = attr.toLowerCase();
+      if (attrLower === 'client' && !sourceIps.has(String(node.id))) return;
+      if (attrLower === 'server' && !destIps.has(String(node.id))) return;
 
       const keysToCheck = getAttributeKeys(attr);
       keysToCheck.forEach((key) => {

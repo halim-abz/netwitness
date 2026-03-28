@@ -7,7 +7,6 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Globe from 'react-globe.gl';
-import * as d3 from 'd3';
 import DOMPurify from 'dompurify';
 import { 
   Play, Pause, Search, Settings, RefreshCw, 
@@ -218,7 +217,7 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
   const [visibleCount, setVisibleCount] = useState(100);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const [impactRings, setImpactRings] = useState<RingData[]>([]);
+  const [impactRings] = useState<RingData[]>([]);
   const impactTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const countryCentroids = useMemo(() => getCountryCentroids(countries), [countries]);
 
@@ -368,12 +367,12 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
     // Perform split operations ONCE per render, not inside the filter loop
     const searchTerms = debouncedQuery.toLowerCase().trim().split(/\s+/).filter(Boolean);
     
-    return articles.filter((article: any) => { // Type cast internally since we added hidden properties
+    return articles.filter((article) => {
       if (!article) return false;
       const types = article.types || [];
       const countriesList = article.countries || [];
 
-      if (typeFilter !== 'all' && !types.includes(typeFilter)) return false;
+      if (typeFilter !== 'all' && !types.includes(typeFilter as any)) return false;
       
       if (geoFilter !== 'all') {
         if (geoFilter.startsWith('region:')) {
@@ -386,13 +385,14 @@ export default function ThreatNews({ isDark, isSidebarOpen, onClose, homeLocatio
       
       if (searchTerms.length > 0) {
         return searchTerms.every(term => {
+          const searchArticle = article as any; // Type cast internally since we added hidden properties
           if (term.startsWith('!')) {
             const excludeTerm = term.slice(1);
             return excludeTerm 
-              ? !(article._searchTitle.includes(excludeTerm) || article._searchSource.includes(excludeTerm) || article._searchSnippet.includes(excludeTerm)) 
+              ? !(searchArticle._searchTitle.includes(excludeTerm) || searchArticle._searchSource.includes(excludeTerm) || searchArticle._searchSnippet.includes(excludeTerm)) 
               : true;
           }
-          return article._searchTitle.includes(term) || article._searchSource.includes(term) || article._searchSnippet.includes(term);
+          return searchArticle._searchTitle.includes(term) || searchArticle._searchSource.includes(term) || searchArticle._searchSnippet.includes(term);
         });
       }
       return true;

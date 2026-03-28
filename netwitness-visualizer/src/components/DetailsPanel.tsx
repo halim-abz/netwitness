@@ -11,11 +11,11 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { GraphData, Node, Link } from "../types";
 import { 
   X, Globe, Shield, Database, Copy, ExternalLink, Network, Activity, 
-  ChevronDown, ChevronUp, UserPlus, Grid, TrendingUp, History 
+  ChevronDown, ChevronUp, UserPlus, Grid, TrendingUp, History, Search
 } from "lucide-react";
 import { formatBytes, formatDate } from "../lib/utils";
-import { Tooltip as RechartsTooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { useAttributeNodeData, useIpNodeStats, ThreatType, ThreatIndicator, ServiceVolume, IpNodeStats } from "../hooks/useDetailsPanelData";
+import ReactECharts from 'echarts-for-react';
+import { useAttributeNodeData, useIpNodeStats, ThreatType } from "../hooks/useDetailsPanelData";
 
 // ==========================================
 // THEME CONFIGURATION
@@ -117,7 +117,7 @@ function NetWitnessLink({ metakey, value, navigateUrl }: { metakey: string, valu
   
   return (
     <a href={url} target="_blank" rel="noopener noreferrer" className={`p-1 text-slate-400 ${THEME.brand.textHover}`} title="View in Navigate" onClick={e => e.stopPropagation()}>
-      <ExternalLink size={12} />
+      <Search size={12} />
     </a>
   );
 }
@@ -136,7 +136,7 @@ function InfoCard({ icon: Icon, label, value, valueClass = "", onClick }: { icon
 // ==========================================
 
 export default function DetailsPanel({
-  selectedItem, onClose, graphData, onNodeSelect, onAttributeSelect, navigateUrl, viewMode = 'graph',
+  selectedItem, onClose, graphData, onNodeSelect, onAttributeSelect, navigateUrl,
 }: DetailsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -587,19 +587,51 @@ function LinkDetails({ link, graphData, onNodeSelect, navigateUrl }: { link: Lin
              <TrendingUp size={14} className="text-slate-500" /> Traffic Trends Over Time
            </h4>
           <div className={`${THEME.dashletCard} p-4 h-40`}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={timeSeriesData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" opacity={0.5} />
-                <XAxis dataKey="formattedTime" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={20} />
-                <YAxis tickFormatter={(v) => formatBytes(Number(v))} tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <RechartsTooltip 
-                  formatter={(value: any, name: any) => [formatBytes(Number(value)), String(name)]} 
-                  contentStyle={{ fontSize: '10px', borderRadius: '6px', backgroundColor: '#0f172a', color: '#fff', border: 'none' }} 
-                  cursor={{ fill: 'rgba(100, 116, 139, 0.1)' }} 
-                />
-                {uniqueServices.map((svc, idx) => <Bar key={svc} dataKey={svc} stackId="a" fill={THEME.chartPalette[idx % THEME.chartPalette.length]} radius={idx === uniqueServices.length - 1 ? [2, 2, 0, 0] : [0, 0, 0, 0]} />)}
-              </BarChart>
-            </ResponsiveContainer>
+            <ReactECharts
+              option={{
+                tooltip: {
+                  trigger: 'axis',
+                  axisPointer: { type: 'shadow' },
+                  backgroundColor: '#0f172a',
+                  borderColor: '#0f172a',
+                  textStyle: { color: '#fff', fontSize: 10 },
+                  formatter: (params: any) => {
+                    let res = `<div style="margin-bottom: 4px;">${params[0].name}</div>`;
+                    params.forEach((p: any) => {
+                      if (p.value > 0) {
+                        res += `<div style="display: flex; justify-content: space-between; gap: 8px;">
+                                  <span>${p.marker} ${p.seriesName}</span>
+                                  <span style="font-family: monospace;">${formatBytes(Number(p.value))}</span>
+                                </div>`;
+                      }
+                    });
+                    return res;
+                  }
+                },
+                grid: { top: 10, right: 10, bottom: 20, left: 40 },
+                xAxis: {
+                  type: 'category',
+                  data: timeSeriesData.map(d => d.formattedTime),
+                  axisLabel: { color: '#64748b', fontSize: 9 },
+                  axisLine: { show: false },
+                  axisTick: { show: false }
+                },
+                yAxis: {
+                  type: 'value',
+                  axisLabel: { color: '#64748b', fontSize: 9, formatter: (value: number) => formatBytes(value) },
+                  splitLine: { lineStyle: { color: '#334155', type: 'dashed', opacity: 0.5 } }
+                },
+                series: uniqueServices.map((svc, idx) => ({
+                  name: svc,
+                  type: 'bar',
+                  stack: 'total',
+                  data: timeSeriesData.map(d => (d as any)[svc] || 0),
+                  itemStyle: { color: THEME.chartPalette[idx % THEME.chartPalette.length] }
+                }))
+              }}
+              style={{ height: '100%', width: '100%' }}
+              opts={{ renderer: 'canvas' }}
+            />
           </div>
         </div>
       )}

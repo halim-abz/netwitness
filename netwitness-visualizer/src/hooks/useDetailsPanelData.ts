@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from "react";
-import { GraphData, Node, Link } from "../types";
+import { GraphData, Node } from "../types";
 
 // --- Types & Interfaces ---
 

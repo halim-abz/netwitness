@@ -252,6 +252,103 @@ async function startServer() {
     }
   });
 
+  app.post("/api/values", async (req, res) => {
+    try {
+      const { host, port, query, size, username, password, fieldName, flags } = req.body;
+      
+      if (!host || !port || !username || !password || !fieldName) {
+        return res.status(400).json({ 
+          error: "Missing connection details or fieldName." 
+        });
+      }
+
+      const sanitizedQuery = query ? query.replace(/[\x00-\x1F\x7F]/g, '') : '';
+      const parsedSize = parseInt(String(size), 10) || 50000;
+      const queryFlags = flags || 'sessions,sort-total,order-descending';
+
+      const url = `https://${host}:${port}/sdk?msg=values&size=${parsedSize}&flags=${encodeURIComponent(queryFlags)}&fieldName=${encodeURIComponent(fieldName)}&where=${encodeURIComponent(sanitizedQuery)}&force-content-type=text/plain`;
+      
+      const httpsAgent = new https.Agent({
+        rejectUnauthorized: false,
+      });
+
+      const headers: any = {
+        'Authorization': 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64')
+      };
+
+      const requestOptions = {
+        method: 'GET',
+        headers,
+        agent: httpsAgent,
+        timeout: 60000
+      };
+
+      const makeRequest = () => new Promise<void>((resolve, reject) => {
+        const req = https.request(url, requestOptions, (response) => {
+          let data = '';
+          response.on('data', (chunk) => { data += chunk; });
+          response.on('end', () => {
+            if (response.statusCode && response.statusCode >= 400) {
+              reject({ 
+                message: `NetWitness API Error (${response.statusCode})`, 
+                status: response.statusCode,
+                detail: data
+              });
+              return;
+            }
+
+            // Parse the text/plain response into JSON
+            const lines = data.split('\n');
+            const results: any[] = [];
+            
+            for (const line of lines) {
+              if (!line || line.trim() === '' || line.startsWith('[id1=0')) continue;
+              if (line.trim() === ']') continue;
+              
+              const item: any = {};
+              // Match key=value pairs, handling potential spaces in values if they are quoted (though usually they aren't in this output)
+              // A simple split by spaces might break if 'value' contains spaces.
+              // Let's use a regex to extract count and value.
+              const countMatch = line.match(/(?:count|size)=(\d+)/);
+              const valueMatch = line.match(/value=(.+?)\s+type=/);
+              
+              if (countMatch && valueMatch) {
+                item.count = parseInt(countMatch[1], 10);
+                item.value = valueMatch[1].trim();
+                results.push(item);
+              }
+            }
+
+            res.status(200).json(results);
+            resolve();
+          });
+          response.on('error', (err) => reject({ message: "Failed to stream NetWitness response", detail: err.message }));
+        });
+
+        req.on('timeout', () => {
+          req.destroy();
+          reject({ message: `Request timed out`, code: 'ETIMEDOUT' });
+        });
+
+        req.on('error', (err: any) => {
+          reject({ message: "Failed to connect to NetWitness.", detail: err.message, code: err.code });
+        });
+        req.end();
+      });
+
+      await makeRequest();
+    } catch (error: any) {
+      if (!res.headersSent) {
+        console.error("Error querying NetWitness values:", error.message || error);
+        res.status(error.status || 500).json({ 
+          error: error.message || "Failed to query NetWitness", 
+          details: error.detail || error.message,
+          code: error.code
+        });
+      }
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
