@@ -1,6 +1,6 @@
 ResourceType=esaRule
 FileName=esa000327
-Title=Regular Beaconing Behavior
+Title=Slow and Low Beaconing Behavior
 Medium=packet
 Tags=
 Description=

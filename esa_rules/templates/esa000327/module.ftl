@@ -39,7 +39,7 @@ SELECT
     MIN(interval_ms) as jitter_min,
     AVG(interval_ms) as jitter_avg,
     STDDEV(interval_ms) as jitter_stddev,
-    ((MAX(interval_ms) - MIN(interval_ms)) / AVG(interval_ms)) AS jitter_percent
+    (STDDEV(interval_ms) / AVG(interval_ms)) AS jitter_percent
 FROM 
     Beacon_Intervals
 GROUP BY 
@@ -48,7 +48,6 @@ GROUP BY
     tcp_dstport
 HAVING 
     COUNT(*) >= 5    /* Triggers for at least 5 beacons */
-    AND ((MAX(interval_ms) - MIN(interval_ms)) / AVG(interval_ms)) < 0.25    /* Trigger if the jitter is less than 25% of the interval */
-    AND STDDEV(interval_ms) < 10000
+    AND (STDDEV(interval_ms) / AVG(interval_ms)) <= 0.25    /* Trigger if the jitter percentage is less than 25% of the interval */
     AND AVG(interval_ms) > 5000    /* Triggers for at least 5sec jitetrs */
 OUTPUT FIRST EVERY 24 hour;

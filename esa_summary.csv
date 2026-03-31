@@ -85,3 +85,5 @@ esa000322,Potential Beaconing Same Size,T1071,Command and Control,Application La
 esa000323,Remotely Create Domain User,T1136.002,Persistence,Create Account,Domain Account
 esa000324,WMI Remote Execution,T1047,Execution,Windows Management Instrumentation,
 esa000325,Common Ransomware File Extension,,,,
+esa000326,Bandwidth Utilization Deviation,,,,
+esa000327,Slow and Low Beaconing Behavior,,,,
