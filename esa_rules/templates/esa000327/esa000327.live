@@ -1,0 +1,12 @@
+ResourceType=esaRule
+FileName=esa000327
+Title=Regular Beaconing Behavior
+Medium=packet
+Tags=
+Description=
+Dependencies=
+Discontinued=false
+Risk=low
+MitreTags=
+MitreIDs=
+Testdata=
