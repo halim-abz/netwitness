@@ -1,54 +1,46 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Activity, AlertTriangle, ArrowRight, Check, 
-  Clock, Copy, FileJson, Filter, Search, Server, Shield, ShieldAlert, Target, X,
-  Globe, User, FileText, MapPin, Lock, Monitor
+  Activity, Check, 
+  Clock, Copy, FileJson, Filter, Search, Server, Shield, Target, X,
+  AlertOctagon, List, FileText
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { MITRE_DICT } from '../lib/mitreDict';
+import { AlertsDashboardProps, Alert, AlertEvent } from './AlertsDashboard';
 
 // --- Types & Interfaces ---
 
-export interface AlertsDashboardProps {
-  host: string;
-  port?: string;
-  username: string;
-  password?: string; // SECURITY NOTE: Passing passwords via frontend props is an anti-pattern unless strictly local/proxied.
-  isDark: boolean;
-  queryTrigger: number;
-  initialAlertId?: string | null;
-  initialFilterIP?: string | null;
+export interface IncidentsDashboardProps extends AlertsDashboardProps {
+  onNavigateToAlerts?: (filter: { alertId?: string, ip?: string }) => void;
 }
 
-export interface AlertEvent {
-  time?: number | string;
-  ip_src?: string;
-  ip_dst?: string;
-  device_ip?: string;
-  ip_addr?: string;
-  user_dst?: string;
-  host_src?: string[];
-  country_dst?: string;
-  city_dst?: string;
-  direction?: string;
-  device_name?: string;
-  tcp_srcport?: string | number;
-  udp_srcport?: string | number;
-  tcp_dstport?: string | number;
-  udp_dstport?: string | number;
-  [key: string]: unknown;
-}
-
-export interface Alert {
+export interface Incident {
   id: string;
-  severity: number;
-  moduleName: string;
-  time: string | number;
-  events: AlertEvent[];
-  tactics?: string[];
-  techniques?: string[];
-  rawScore?: number;
+  title: string;
+  summary: string | null;
+  priority: string;
+  riskScore: number;
+  status: string;
+  alertCount: number;
+  averageAlertRiskScore: number;
+  sealed: boolean;
+  created: string;
+  lastUpdated: string;
+  lastUpdatedBy: string | null;
+  assignee: string | null;
+  sources: string[];
+  categories: string[] | null;
+  journalEntries: any[] | null;
+  createdBy: string;
+  eventCount: number;
+  alertMeta: {
+    SourceIp?: string[];
+    DestinationIp?: string[];
+    [key: string]: string[] | undefined;
+  } | null;
+  tactics: string[];
+  techniques: string[];
 }
 
 // --- Constants ---
@@ -56,18 +48,22 @@ export interface Alert {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_YEAR = 365 * MS_PER_DAY;
 
-const SEVERITY_COLORS: Record<number, string> = {
-  1: '#3b82f6', // Low - Blue
-  2: '#eab308', // Medium - Yellow
-  3: '#f97316', // High - Orange
-  4: '#ef4444', // Critical - Red
+const PRIORITY_COLORS: Record<string, string> = {
+  'Low': '#3b82f6', // Blue
+  'Medium': '#eab308', // Yellow
+  'High': '#f97316', // Orange
+  'Critical': '#ef4444', // Red
 };
 
-const SEVERITY_LABELS: Record<number, string> = {
-  1: 'Low',
-  2: 'Medium',
-  3: 'High',
-  4: 'Critical',
+const STATUS_COLORS: Record<string, string> = {
+  'New': '#3b82f6', // Blue
+  'Assigned': '#d946ef', // Fuschia
+  'Reopen': '#6366f1', // Indigo
+  'InProgress': '#f59e0b', // Amber
+  'Closed': '#10b981', // Emerald
+  'ClosedFalsePositive': '#6b7280', // Gray
+  'RemediationRequested': '#8b5cf6', // Purple
+  'RemediationComplete': '#14b8a6', // Teal
 };
 
 const CHART_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#10b981', '#06b6d4'];
@@ -96,6 +92,22 @@ const getMitreName = (id?: string): string => {
   return cleanId;
 };
 
+const getIncidentTimeSafe = (incident: Partial<Incident>): Date => {
+  if (incident.created) {
+    const d = new Date(incident.created);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date(); 
+};
+
+const formatDateSafe = (incident: Partial<Incident>): string => {
+  try {
+    return format(getIncidentTimeSafe(incident), 'MMM dd, HH:mm:ss');
+  } catch {
+    return 'Invalid Date';
+  }
+};
+
 const getSeverityLevel = (score: number | string): number => {
   const s = Number(score);
   if (isNaN(s)) return 1;
@@ -113,44 +125,21 @@ const getSeverityLevel = (score: number | string): number => {
   }
 };
 
-const getSourceIdentity = (e?: AlertEvent | null): string | null => {
-  if (!e) return null;
-  if (e.ip_src && e.ip_src !== '-') return String(e.ip_src);
-  if (e.device_ip && e.device_ip !== '-') return String(e.device_ip);
-  if (Array.isArray(e.host_src) && e.host_src[0] !== '-') return String(e.host_src[0]);
-  return null;
+const SEVERITY_LABELS: Record<number, string> = {
+  1: 'Low',
+  2: 'Medium',
+  3: 'High',
+  4: 'Critical',
 };
 
-const getDestIdentity = (e?: AlertEvent | null): string | null => {
-  if (!e) return null;
-  if (e.ip_dst && e.ip_dst !== '-') return String(e.ip_dst);
-  if (e.ip_addr && e.ip_addr !== '-') return String(e.ip_addr);
-  if (e.user_dst && e.user_dst !== '-') return String(e.user_dst);
-  return null;
+const SEVERITY_COLORS: Record<number, string> = {
+  1: '#3b82f6', // Low - Blue
+  2: '#eab308', // Medium - Yellow
+  3: '#f97316', // High - Orange
+  4: '#ef4444', // Critical - Red
 };
 
-const getAlertTimeSafe = (alert: Partial<Alert>): Date => {
-  if (alert.time) {
-    // Check if time is a numeric string (Unix epoch) and convert to Number
-    const timeValue = typeof alert.time === 'string' && /^\d+$/.test(alert.time) 
-      ? Number(alert.time) 
-      : alert.time;
-      
-    const d = new Date(timeValue);
-    if (!isNaN(d.getTime())) return d;
-  }
-  return new Date(); 
-};
-
-const formatDateSafe = (alert: Partial<Alert>): string => {
-  try {
-    return format(getAlertTimeSafe(alert), 'MMM dd, HH:mm:ss');
-  } catch {
-    return 'Invalid Date';
-  }
-};
-
-// --- Sub-Components (Extracted for performance) ---
+// --- Sub-Components ---
 
 const KPICard = ({ icon: Icon, label, value, color = "text-nw-red", trendData, trendColor = "#ef4444" }: { icon: React.ElementType, label: string, value: string | number, color?: string, trendData?: { value: number }[], trendColor?: string }) => {
   const option = trendData && trendData.length > 0 ? {
@@ -195,31 +184,133 @@ const KPICard = ({ icon: Icon, label, value, color = "text-nw-red", trendData, t
   );
 };
 
-interface AlertDrawerProps {
-  alert: Alert | null;
+interface IncidentDrawerProps {
+  incident: Incident | null;
   onClose: () => void;
+  host: string;
+  port?: string;
+  username: string;
+  password?: string;
+  onIPClick?: (ip: string) => void;
+  onAlertClick?: (alertId: string) => void;
 }
 
-const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
+const IncidentDrawer: React.FC<IncidentDrawerProps> = ({ incident, onClose, host, port, username, password, onIPClick, onAlertClick }) => {
   const [copied, setCopied] = useState(false);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loadingAlerts, setLoadingAlerts] = useState(false);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
   
-  // Reset copy state when alert changes
-  useEffect(() => setCopied(false), [alert]);
+  useEffect(() => {
+    setCopied(false);
+    if (incident) {
+      fetchIncidentAlerts();
+    } else {
+      setAlerts([]);
+    }
+  }, [incident]);
 
-  if (!alert) return null;
-  
-  const event = alert.events?.[0] || {};
-  
-  const eventGridData = Object.entries(event).filter(([, value]) => {
-    if (value === null || typeof value === 'object' || Array.isArray(value)) return false;
-    if (typeof value === 'string' && value.length > 50) return false;
-    return true;
-  });
+  const fetchIncidentAlerts = async () => {
+    if (!incident) return;
+    setLoadingAlerts(true);
+    setAlertsError(null);
+    try {
+      const response = await fetch(`/api/incidents/${encodeURIComponent(incident.id)}/alerts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, port, username, password })
+      });
 
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: 'Unknown server error' }));
+        throw new Error(errData.error || `Failed to fetch incident alerts: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      let rawItems: Record<string, unknown>[] = [];
+      if (data && Array.isArray(data.items)) {
+        rawItems = data.items;
+      } else if (Array.isArray(data)) {
+        rawItems = data;
+      }
+
+      const alertsList: Alert[] = rawItems.map((item) => {
+        const originalHeaders = (item.originalHeaders as Record<string, unknown>) || {};
+        const originalAlert = (item.originalAlert as Record<string, unknown>) || {};
+        const events = (originalAlert.events || item.events || []) as AlertEvent[];
+        
+        const rawScore = Number(
+          originalAlert.severity ?? originalAlert.risk_score ?? item.severity ?? originalHeaders.severity ?? 10
+        );
+
+        return {
+          id: String(item.id || Math.random().toString(36).substring(7)),
+          rawScore,
+          severity: getSeverityLevel(rawScore),
+          moduleName: String(item.title || originalHeaders.name || item.name || 'Unknown Alert'),
+          time: (item.created || originalHeaders.timestamp || item.timestamp || item.receivedTime) as string | number,
+          tactics: (item.tactics || originalAlert.tactics || []) as string[],
+          techniques: (item.techniques || originalAlert.techniques || []) as string[],
+          events
+        };
+      });
+      
+      setAlerts(alertsList);
+    } catch (err: unknown) {
+      setAlertsError(err instanceof Error ? err.message : 'An unknown error occurred');
+    } finally {
+      setLoadingAlerts(false);
+    }
+  };
+
+  if (!incident) return null;
+  
   const handleCopy = () => {
-    navigator.clipboard.writeText(JSON.stringify(event, null, 2));
+    navigator.clipboard.writeText(JSON.stringify(incident, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const priorityColor = PRIORITY_COLORS[incident.priority] || '#9ca3af';
+  const statusColor = STATUS_COLORS[incident.status] || '#9ca3af';
+
+  const renderMetadataLink = (key: string, value: string) => {
+    const baseUrl = (import.meta.env.VITE_NW_NAVIGATE_URL || 'https://nw-head-node/investigate/navigate').replace(/\/$/, '');
+    const isIPv4 = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(value);
+    const isIPv6 = /^[0-9a-fA-F:]+$/.test(value) && value.includes(':');
+    const isNumber = !isNaN(Number(value)) && value.trim() !== '';
+    const formattedValue = (isIPv4 || isIPv6 || isNumber) ? value : `'${value}'`;
+    const investigateUrl = `${baseUrl}/query/${encodeURIComponent(key)}=${encodeURIComponent(formattedValue)}`;
+
+    return (
+      <div className="flex items-center gap-2 group">
+        <span 
+          className={`block text-sm font-semibold truncate ${
+            (key === 'ip.src' || key === 'ip.dst') && onIPClick 
+              ? 'text-nw-red cursor-pointer hover:underline' 
+              : 'text-gray-900 dark:text-gray-200'
+          }`}
+          title={value}
+          onClick={() => {
+            if ((key === 'ip.src' || key === 'ip.dst') && onIPClick) {
+              onIPClick(value);
+            }
+          }}
+        >
+          {value}
+        </span>
+        <a 
+          href={investigateUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-nw-red"
+          title={`Investigate ${key} in NetWitness`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Search className="w-3 h-3" />
+        </a>
+      </div>
+    );
   };
 
   return (
@@ -229,29 +320,39 @@ const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
         onClick={onClose} 
       />
       
-      <div className="relative w-full max-w-2xl bg-white dark:bg-gray-900 h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-800 transform transition-transform duration-300 ease-in-out">
+      <div className="relative w-full max-w-3xl bg-white dark:bg-gray-900 h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-gray-800 transform transition-transform duration-300 ease-in-out">
         <div className="flex-none px-6 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/50 flex justify-between items-start gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
               <span 
                 className="px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider"
                 style={{ 
-                  backgroundColor: `${SEVERITY_COLORS[alert.severity]}20`,
-                  color: SEVERITY_COLORS[alert.severity],
-                  border: `1px solid ${SEVERITY_COLORS[alert.severity]}40`
+                  backgroundColor: `${priorityColor}20`,
+                  color: priorityColor,
+                  border: `1px solid ${priorityColor}40`
                 }}
               >
-                {SEVERITY_LABELS[alert.severity]} (Score: {alert.rawScore || 'N/A'})
+                {incident.priority} (Score: {incident.riskScore})
+              </span>
+              <span 
+                className="px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider"
+                style={{ 
+                  backgroundColor: `${statusColor}20`,
+                  color: statusColor,
+                  border: `1px solid ${statusColor}40`
+                }}
+              >
+                {incident.status}
               </span>
               <span className="text-sm text-gray-500 flex items-center gap-1">
                 <Clock className="w-3.5 h-3.5" />
-                {formatDateSafe(alert)}
+                {formatDateSafe(incident)}
               </span>
             </div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white leading-tight mt-2">
-              {alert.moduleName}
+              {incident.title}
             </h2>
-            <p className="text-xs text-gray-400 mt-1 font-mono">ID: {alert.id}</p>
+            <p className="text-xs text-gray-400 mt-1 font-mono">ID: {incident.id}</p>
           </div>
           <button 
             onClick={onClose}
@@ -262,40 +363,44 @@ const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
+          
+          {incident.summary && (
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">Summary</h3>
+              <p className="text-sm text-gray-700 dark:text-gray-300">{incident.summary}</p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Source</p>
-              <p className="text-base font-medium text-gray-900 dark:text-gray-200 break-all">
-                {getSourceIdentity(event) || 'Unknown'}
-              </p>
-              {event.tcp_srcport || event.udp_srcport ? (
-                <p className="text-xs text-gray-500 mt-1">Port: {String(event.tcp_srcport || event.udp_srcport)}</p>
-              ) : null}
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Sources</p>
+              <div className="flex flex-wrap gap-1">
+                {incident.sources?.map(s => (
+                  <span key={s} className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded text-xs text-gray-800 dark:text-gray-200">{s}</span>
+                ))}
+              </div>
             </div>
             <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Destination</p>
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-1">Assignee</p>
               <p className="text-base font-medium text-gray-900 dark:text-gray-200 break-all">
-                {getDestIdentity(event) || 'Unknown'}
+                {incident.assignee || 'Unassigned'}
               </p>
-              {event.tcp_dstport || event.udp_dstport ? (
-                <p className="text-xs text-gray-500 mt-1">Port: {String(event.tcp_dstport || event.udp_dstport)}</p>
-              ) : null}
             </div>
           </div>
 
-          {(alert.tactics?.length || alert.techniques?.length) ? (
+          {(incident.tactics?.length || incident.techniques?.length) ? (
             <div>
               <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
                 <Target className="w-4 h-4 text-nw-red" />
                 MITRE ATT&CK Mapping
               </h3>
               <div className="flex flex-wrap gap-2">
-                {alert.tactics?.map(t => (
+                {incident.tactics?.map(t => (
                   <div key={t} className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium border border-blue-200 dark:border-blue-800/50">
                     {getMitreName(t)}
                   </div>
                 ))}
-                {alert.techniques?.map(t => (
+                {incident.techniques?.map(t => (
                   <div key={t} className="px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-medium border border-purple-200 dark:border-purple-800/50">
                     {getMitreName(t)}
                   </div>
@@ -304,54 +409,123 @@ const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
             </div>
           ) : null}
 
-          <div>
-            <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-              <Server className="w-4 h-4 text-nw-red" />
-              Event Metadata
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-6 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
-              {eventGridData.length > 0 ? (
-                eventGridData.map(([key, value]) => {
+          {incident.alertMeta && Object.keys(incident.alertMeta).length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <Server className="w-4 h-4 text-nw-red" />
+                Incident Metadata
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-6 bg-white dark:bg-gray-900 p-4 rounded-xl border border-gray-200 dark:border-gray-800">
+                {Object.entries(incident.alertMeta).map(([key, values]) => {
+                  if (!values || values.length === 0) return null;
                   const displayKey = key.replace(/_/g, ' ');
-                  const queryKey = key.replace(/_/g, '.');
-                  const queryValue = String(value);
-                  
-                  const isIPv4 = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(queryValue);
-                  const isIPv6 = /^[0-9a-fA-F:]+$/.test(queryValue) && queryValue.includes(':');
-                  const isNumber = !isNaN(Number(queryValue)) && queryValue.trim() !== '';
-                  const formattedValue = (isIPv4 || isIPv6 || isNumber) ? queryValue : `'${queryValue}'`;
-                  
-                  const baseUrl = (import.meta.env.VITE_NW_NAVIGATE_URL || 'https://nw-head-node/investigate/navigate').replace(/\/$/, '');
-                  const investigateUrl = `${baseUrl}/query/${encodeURIComponent(queryKey)}=${encodeURIComponent(formattedValue)}`;
+                  // Map common keys to NetWitness query keys if needed
+                  let queryKey = key.toLowerCase();
+                  if (queryKey === 'sourceip') queryKey = 'ip.src';
+                  if (queryKey === 'destinationip') queryKey = 'ip.dst';
 
                   return (
-                    <div key={key} className="group relative">
-                      <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5 truncate" title={displayKey}>
+                    <div key={key} className="flex flex-col gap-1">
+                      <span className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5" title={displayKey}>
                         {displayKey}
                       </span>
-                      <div className="flex items-center gap-2">
-                        <span className="block text-sm font-semibold text-gray-900 dark:text-gray-200 truncate" title={queryValue}>
-                          {queryValue}
-                        </span>
-                        <a 
-                          href={investigateUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-nw-red"
-                          title={`Investigate ${queryKey} in NetWitness`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Search className="w-3 h-3" />
-                        </a>
+                      <div className="flex flex-col gap-1">
+                        {values.map((val, idx) => (
+                          <div key={idx}>
+                            {renderMetadataLink(queryKey, val)}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   );
-                })
+                })}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+              <List className="w-4 h-4 text-nw-red" />
+              Related Alerts ({incident.alertCount})
+            </h3>
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+              {loadingAlerts ? (
+                <div className="p-8 flex justify-center">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-nw-red"></div>
+                </div>
+              ) : alertsError ? (
+                <div className="p-4 text-sm text-red-500">{alertsError}</div>
+              ) : alerts.length === 0 ? (
+                <div className="p-4 text-sm text-gray-500 text-center">No alerts found for this incident.</div>
               ) : (
-                <div className="col-span-full text-sm text-gray-500">No scalar metadata found in event payload.</div>
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full text-left border-collapse table-fixed">
+                    <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/50 text-xs uppercase text-gray-500 dark:text-gray-400 z-10">
+                      <tr>
+                        <th className="px-4 py-2 font-medium w-32">Time</th>
+                        <th className="px-4 py-2 font-medium w-24">Severity</th>
+                        <th className="px-4 py-2 font-medium">Name</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 dark:divide-gray-800 text-sm">
+                      {alerts.map((alert) => (
+                        <tr 
+                          key={alert.id} 
+                          className={`hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors ${onAlertClick ? 'cursor-pointer' : ''}`}
+                          onClick={() => onAlertClick && onAlertClick(alert.id)}
+                        >
+                          <td className="px-4 py-2 text-gray-500 dark:text-gray-400 whitespace-nowrap truncate">
+                            {formatDateSafe(alert)}
+                          </td>
+                          <td className="px-4 py-2 truncate">
+                            <span 
+                              className="px-2 py-1 rounded-md text-xs font-medium"
+                              style={{ 
+                                backgroundColor: `${SEVERITY_COLORS[alert.severity]}20`,
+                                color: SEVERITY_COLORS[alert.severity] 
+                              }}
+                            >
+                              {SEVERITY_LABELS[alert.severity] || 'Unknown'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 truncate text-gray-900 dark:text-gray-200" title={alert.moduleName}>
+                            {alert.moduleName}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           </div>
+
+          {incident.journalEntries && incident.journalEntries.length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-nw-red" />
+                Journal Entries
+              </h3>
+              <div className="space-y-3">
+                {incident.journalEntries.map((entry, idx) => (
+                  <div key={idx} className="p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/30">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-semibold text-gray-900 dark:text-gray-200">{entry.author || 'Unknown Author'}</span>
+                      <div className="flex items-center gap-2">
+                        {entry.milestone && entry.milestone !== 'None' && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border border-blue-200 dark:border-blue-800/50 uppercase tracking-wider">
+                            {entry.milestone}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-500">{entry.created ? formatDateSafe({ created: entry.created }) : ''}</span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{entry.notes || entry.comment || JSON.stringify(entry)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-3">
@@ -369,7 +543,7 @@ const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
             </div>
             <div className="bg-gray-900 rounded-xl p-4 overflow-x-auto border border-gray-800 shadow-inner">
               <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap break-all leading-relaxed">
-                {JSON.stringify(event, null, 2)}
+                {JSON.stringify(incident, null, 2)}
               </pre>
             </div>
           </div>
@@ -381,25 +555,37 @@ const AlertDrawer: React.FC<AlertDrawerProps> = ({ alert, onClose }) => {
 
 // --- Main Component ---
 
-export default function AlertsDashboard({ host, port, username, password, isDark, queryTrigger, initialAlertId, initialFilterIP }: AlertsDashboardProps) {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+export default function IncidentsDashboard({ host, port, username, password, isDark, queryTrigger, onNavigateToAlerts }: IncidentsDashboardProps) {
+  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   const [timeRange, setTimeRange] = useState(TIME_RANGES[2]); 
-  const [searchQuery, setSearchQuery] = useState(initialAlertId || '');
-  const [selectedIP, setSelectedIP] = useState<string | null>(initialFilterIP || null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIP, setSelectedIP] = useState<string | null>(null);
+  const handleIPClick = (ip: string) => {
+    if (onNavigateToAlerts) {
+      onNavigateToAlerts({ ip });
+    } else {
+      setSelectedIP(ip);
+    }
+  };
+
+  const handleAlertClick = (alertId: string) => {
+    if (onNavigateToAlerts) {
+      onNavigateToAlerts({ alertId });
+    }
+  };
   
-  const [selectedAlertDetails, setSelectedAlertDetails] = useState<Alert | null>(null);
+  const [filterPriority, setFilterPriority] = useState<string>('All');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [filterAssignee, setFilterAssignee] = useState<string>('All');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  const [selectedIncidentDetails, setSelectedIncidentDetails] = useState<Incident | null>(null);
 
-  // Update state if props change
   useEffect(() => {
-    setSearchQuery(initialAlertId || '');
-    setSelectedIP(initialFilterIP || null);
-  }, [initialAlertId, initialFilterIP]);
-
-  useEffect(() => {
-    const fetchAlerts = async () => {
+    const fetchIncidents = async () => {
       if (!queryTrigger) return;
 
       if (!host || !username || !password) {
@@ -411,7 +597,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
       setError(null);
 
       try {
-        const response = await fetch('/api/alerts', {
+        const response = await fetch('/api/incidents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -425,42 +611,61 @@ export default function AlertsDashboard({ host, port, username, password, isDark
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({ error: 'Unknown server error' }));
-          throw new Error(errData.error || `Failed to fetch alerts: ${response.statusText}`);
+          throw new Error(errData.error || `Failed to fetch incidents: ${response.statusText}`);
         }
 
         const data = await response.json();
         
-        // Handle various backend wrapper shapes safely
-        let rawItems: Record<string, unknown>[] = [];
+        let rawItems: any[] = [];
         if (data && Array.isArray(data.items)) {
           rawItems = data.items;
         } else if (Array.isArray(data)) {
           rawItems = data;
         }
 
-        const alertsList: Alert[] = rawItems.map((item) => {
-          const originalHeaders = (item.originalHeaders as Record<string, unknown>) || {};
-          const originalAlert = (item.originalAlert as Record<string, unknown>) || {};
-          const events = (originalAlert.events || item.events || []) as AlertEvent[];
-          
-          const rawScore = Number(
-            originalAlert.severity ?? originalAlert.risk_score ?? item.severity ?? originalHeaders.severity ?? 10
-          );
+        const processAlertMeta = (meta: any) => {
+          if (!meta) return null;
+          const processed: any = {};
+          for (const [k, v] of Object.entries(meta)) {
+            if (Array.isArray(v)) {
+              processed[k] = v.flatMap((val: any) => typeof val === 'string' ? val.split(',').map(s => s.trim()) : val);
+            } else if (typeof v === 'string') {
+              processed[k] = v.split(',').map(s => s.trim());
+            } else {
+              processed[k] = v;
+            }
+          }
+          return processed;
+        };
 
+        const incidentsList: Incident[] = rawItems.map((item) => {
           return {
-            id: String(item.id || Math.random().toString(36).substring(7)),
-            rawScore,
-            severity: getSeverityLevel(rawScore),
-            moduleName: String(originalHeaders.name || item.name || 'Unknown Alert'),
-            time: (originalHeaders.timestamp || item.timestamp || item.receivedTime) as string | number,
-            tactics: (item.tactics || originalAlert.tactics || []) as string[],
-            techniques: (item.techniques || originalAlert.techniques || []) as string[],
-            events
+            id: item.id || '',
+            title: item.title || 'Untitled Incident',
+            summary: item.summary || null,
+            priority: item.priority || 'Low',
+            riskScore: item.riskScore || 0,
+            status: item.status || 'New',
+            alertCount: item.alertCount || 0,
+            averageAlertRiskScore: item.averageAlertRiskScore || 0,
+            sealed: item.sealed || false,
+            created: item.created || new Date().toISOString(),
+            lastUpdated: item.lastUpdated || new Date().toISOString(),
+            lastUpdatedBy: item.lastUpdatedBy || null,
+            assignee: item.assignee || null,
+            sources: item.sources || [],
+            categories: item.categories || [],
+            journalEntries: item.journalEntries || [],
+            createdBy: item.createdBy || 'Unknown',
+            eventCount: item.eventCount || 0,
+            alertMeta: processAlertMeta(item.alertMeta),
+            tactics: item.tactics || [],
+            techniques: item.techniques || []
           };
         });
         
-        alertsList.sort((a, b) => getAlertTimeSafe(b).getTime() - getAlertTimeSafe(a).getTime());
-        setAlerts(alertsList);
+        incidentsList.sort((a, b) => getIncidentTimeSafe(b).getTime() - getIncidentTimeSafe(a).getTime());
+        setIncidents(incidentsList);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
       } finally {
@@ -468,46 +673,62 @@ export default function AlertsDashboard({ host, port, username, password, isDark
       }
     };
 
-    fetchAlerts();
+    fetchIncidents();
   }, [host, port, username, password, timeRange, queryTrigger]);
 
-  const filteredAlerts = useMemo(() => {
-    if (!searchQuery && !selectedIP) return alerts;
-
+  const filteredIncidents = useMemo(() => {
     const lowerQuery = searchQuery.toLowerCase();
     
-    return alerts.filter(alert => {
+    return incidents.filter(incident => {
+      // Text Search
       let matchesSearch = true;
       if (lowerQuery) {
-        const eventValues = alert.events?.flatMap(e => Object.values(e).map(v => String(v))).filter(Boolean).join(' ') || '';
-        const searchStr = `${alert.moduleName} ${alert.id} ${alert.tactics?.join(' ')} ${alert.techniques?.join(' ')} ${eventValues}`.toLowerCase();
+        const metaValues = incident.alertMeta ? Object.values(incident.alertMeta).flat().join(' ') : '';
+        const searchStr = `${incident.title} ${incident.id} ${incident.tactics?.join(' ')} ${incident.techniques?.join(' ')} ${metaValues}`.toLowerCase();
         matchesSearch = searchStr.includes(lowerQuery);
       }
-      
+
+      // IP Click Filter
       let matchesIP = true;
       if (selectedIP) {
-        matchesIP = Array.isArray(alert.events) && alert.events.some((e) => 
-          getSourceIdentity(e) === selectedIP || getDestIdentity(e) === selectedIP
-        );
+        matchesIP = false;
+        if (incident.alertMeta) {
+          const ips = [
+            ...(incident.alertMeta.SourceIp || []),
+            ...(incident.alertMeta.DestinationIp || [])
+          ];
+          matchesIP = ips.includes(selectedIP);
+        }
       }
 
-      return matchesSearch && matchesIP;
+      // Dropdown Filters
+      const matchesPriority = filterPriority === 'All' || incident.priority === filterPriority;
+      const matchesStatus = filterStatus === 'All' || incident.status === filterStatus;
+      const assignee = incident.assignee || 'Unassigned';
+      const matchesAssignee = filterAssignee === 'All' || assignee === filterAssignee;
+
+      return matchesSearch && matchesIP && matchesPriority && matchesStatus && matchesAssignee;
     });
-  }, [alerts, searchQuery, selectedIP]);
+  }, [incidents, searchQuery, selectedIP, filterPriority, filterStatus, filterAssignee]);
+
+  const uniquePriorities = useMemo(() => Array.from(new Set(incidents.map(i => i.priority))).sort(), [incidents]);
+  const uniqueStatuses = useMemo(() => Array.from(new Set(incidents.map(i => i.status))).sort(), [incidents]);
+  const uniqueAssignees = useMemo(() => Array.from(new Set(incidents.map(i => i.assignee || 'Unassigned'))).sort(), [incidents]);
 
   const kpis = useMemo(() => {
-    const total = filteredAlerts.length;
-    const criticalHigh = filteredAlerts.filter(a => a.severity >= 3).length;
-    const uniqueRules = new Set(filteredAlerts.map(a => a.moduleName)).size;
+    const total = filteredIncidents.length;
+    const criticalHigh = filteredIncidents.filter(a => a.priority === 'Critical' || a.priority === 'High').length;
+    const openIncidents = filteredIncidents.filter(a => a.status === 'New' || a.status === 'In Progress').length;
     
     const ipCounts: Record<string, number> = {};
-    filteredAlerts.forEach(alert => {
-      if (Array.isArray(alert.events)) {
-        alert.events.forEach(e => {
-          const src = getSourceIdentity(e);
-          const dst = getDestIdentity(e);
-          if (src) ipCounts[src] = (ipCounts[src] || 0) + 1;
-          if (dst) ipCounts[dst] = (ipCounts[dst] || 0) + 1;
+    filteredIncidents.forEach(incident => {
+      if (incident.alertMeta) {
+        const ips = [
+          ...(incident.alertMeta.SourceIp || []),
+          ...(incident.alertMeta.DestinationIp || [])
+        ];
+        ips.forEach(ip => {
+          ipCounts[ip] = (ipCounts[ip] || 0) + 1;
         });
       }
     });
@@ -521,23 +742,23 @@ export default function AlertsDashboard({ host, port, username, password, isDark
       }
     });
 
-    return { total, criticalHigh, uniqueRules, topIP };
-  }, [filteredAlerts]);
+    return { total, criticalHigh, openIncidents, topIP };
+  }, [filteredIncidents]);
 
   const volumeData = useMemo(() => {
     const countsByDate: Record<string, { Low: number, Medium: number, High: number, Critical: number }> = {};
-    const ascendingAlerts = [...filteredAlerts].sort((a, b) => getAlertTimeSafe(a).getTime() - getAlertTimeSafe(b).getTime());
+    const ascendingIncidents = [...filteredIncidents].sort((a, b) => getIncidentTimeSafe(a).getTime() - getIncidentTimeSafe(b).getTime());
     
-    ascendingAlerts.forEach(a => {
+    ascendingIncidents.forEach(a => {
       try {
-        const date = format(getAlertTimeSafe(a), 'MMM dd');
+        const date = format(getIncidentTimeSafe(a), 'MMM dd');
         if (!countsByDate[date]) {
           countsByDate[date] = { Low: 0, Medium: 0, High: 0, Critical: 0 };
         }
         
-        const sevLabel = SEVERITY_LABELS[a.severity] as 'Low' | 'Medium' | 'High' | 'Critical';
-        if (sevLabel) {
-            countsByDate[date][sevLabel] += 1;
+        const priority = a.priority as 'Low' | 'Medium' | 'High' | 'Critical';
+        if (priority && countsByDate[date][priority] !== undefined) {
+            countsByDate[date][priority] += 1;
         }
       } catch {
         // Silently skip invalid dates
@@ -545,11 +766,10 @@ export default function AlertsDashboard({ host, port, username, password, isDark
     });
     
     return Object.entries(countsByDate).map(([date, counts]) => ({ date, ...counts }));
-  }, [filteredAlerts]);
+  }, [filteredIncidents]);
 
   const totalTrendData = useMemo(() => {
     const data = volumeData.map(d => ({ value: d.Low + d.Medium + d.High + d.Critical }));
-    // Recharts needs at least 2 points to draw an area/line properly
     if (data.length === 1) return [data[0], data[0]];
     return data;
   }, [volumeData]);
@@ -560,40 +780,19 @@ export default function AlertsDashboard({ host, port, username, password, isDark
     return data;
   }, [volumeData]);
 
-  const severityData = useMemo(() => {
-    const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
-    filteredAlerts.forEach(a => {
-      if (a.severity in counts) {
-        counts[a.severity as keyof typeof counts]++;
-      }
-    });
-    return [
-      { name: 'Critical', value: counts[4], color: SEVERITY_COLORS[4] },
-      { name: 'High', value: counts[3], color: SEVERITY_COLORS[3] },
-      { name: 'Medium', value: counts[2], color: SEVERITY_COLORS[2] },
-      { name: 'Low', value: counts[1], color: SEVERITY_COLORS[1] },
-    ].filter(item => item.value > 0);
-  }, [filteredAlerts]);
-
-  const topAlertsData = useMemo(() => {
+  const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredAlerts.forEach(a => {
-      const name = a.moduleName || 'Unknown Alert';
-      counts[name] = (counts[name] || 0) + 1;
+    filteredIncidents.forEach(a => {
+      counts[a.status] = (counts[a.status] || 0) + 1;
     });
     return Object.entries(counts)
-      .map(([name, count]) => ({ 
-        name: name.length > 25 ? name.substring(0, 25) + '...' : name, 
-        fullName: name,
-        count 
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  }, [filteredAlerts]);
+      .map(([name, value]) => ({ name, value, color: STATUS_COLORS[name] || '#9ca3af' }))
+      .filter(item => item.value > 0);
+  }, [filteredIncidents]);
 
   const mitreData = useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredAlerts.forEach(a => {
+    filteredIncidents.forEach(a => {
       if (a.tactics && a.tactics.length > 0) {
         a.tactics.forEach(t => {
           const cleanT = t.trim();
@@ -605,21 +804,18 @@ export default function AlertsDashboard({ host, port, username, password, isDark
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-  }, [filteredAlerts]);
+  }, [filteredIncidents]);
 
   const topAssetsData = useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredAlerts.forEach(alert => {
-      if (Array.isArray(alert.events)) {
-        alert.events.forEach(e => {
-          const src = getSourceIdentity(e);
-          const dst = getDestIdentity(e);
-          if (src) {
-            counts[src] = (counts[src] || 0) + 1;
-          }
-          if (dst) {
-            counts[dst] = (counts[dst] || 0) + 1;
-          }
+    filteredIncidents.forEach(incident => {
+      if (incident.alertMeta) {
+        const ips = [
+          ...(incident.alertMeta.SourceIp || []),
+          ...(incident.alertMeta.DestinationIp || [])
+        ];
+        ips.forEach(ip => {
+          counts[ip] = (counts[ip] || 0) + 1;
         });
       }
     });
@@ -631,7 +827,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
       }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
-  }, [filteredAlerts]);
+  }, [filteredIncidents]);
 
   const handleBarClick = useCallback((data: { name?: string }) => {
     if (data?.name) {
@@ -641,27 +837,36 @@ export default function AlertsDashboard({ host, port, username, password, isDark
 
   return (
     <div className="flex flex-col h-full w-full min-w-full overflow-hidden bg-gray-50 dark:bg-gray-950 relative">
-      <AlertDrawer alert={selectedAlertDetails} onClose={() => setSelectedAlertDetails(null)} />
+      <IncidentDrawer 
+        incident={selectedIncidentDetails} 
+        onClose={() => setSelectedIncidentDetails(null)} 
+        host={host}
+        port={port}
+        username={username}
+        password={password}
+        onIPClick={handleIPClick}
+        onAlertClick={handleAlertClick}
+      />
       
       {/* Header */}
       <div className="flex-none p-6 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <ShieldAlert className="w-6 h-6 text-nw-red" />
-              Alerts Dashboard
+              <AlertOctagon className="w-6 h-6 text-nw-red" />
+              Incidents Dashboard
             </h1>
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              Monitor and investigate security alerts from NetWitness
+              Monitor and investigate security incidents from NetWitness
             </p>
           </div>
           
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
             <div className="relative flex-1 md:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input 
                 type="text"
-                placeholder="Search alerts or MITRE..."
+                placeholder="Search incidents or MITRE..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-gray-100 dark:bg-gray-800 border-none rounded-lg text-sm focus:ring-2 focus:ring-nw-red outline-none text-gray-900 dark:text-white"
@@ -673,6 +878,14 @@ export default function AlertsDashboard({ host, port, username, password, isDark
               )}
             </div>
             
+            <button 
+              onClick={() => setShowFilters(!showFilters)}
+              className={`p-2 rounded-lg transition-colors ${showFilters ? 'bg-nw-red text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}
+              title="Advanced Filters"
+            >
+              <Filter className="w-4 h-4" />
+            </button>
+
             <select
               value={timeRange.value}
               onChange={(e) => setTimeRange(TIME_RANGES.find(t => t.value === e.target.value) || TIME_RANGES[2])}
@@ -685,12 +898,64 @@ export default function AlertsDashboard({ host, port, username, password, isDark
           </div>
         </div>
 
+        {showFilters && (
+          <div className="flex flex-wrap gap-4 mb-6 p-4 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-800 rounded-lg shadow-sm animate-in fade-in slide-in-from-top-2">
+            <div className="flex flex-col gap-1.5 min-w-[150px]">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Priority</label>
+              <select 
+                value={filterPriority} 
+                onChange={e => setFilterPriority(e.target.value)} 
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-2.5 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:ring-1 focus:ring-nw-red outline-none"
+              >
+                <option value="All">All Priorities</option>
+                {uniquePriorities.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5 min-w-[150px]">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Status</label>
+              <select 
+                value={filterStatus} 
+                onChange={e => setFilterStatus(e.target.value)} 
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-2.5 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:ring-1 focus:ring-nw-red outline-none"
+              >
+                <option value="All">All Statuses</option>
+                {uniqueStatuses.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5 min-w-[150px]">
+              <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Assignee</label>
+              <select 
+                value={filterAssignee} 
+                onChange={e => setFilterAssignee(e.target.value)} 
+                className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md px-2.5 py-1.5 text-sm text-gray-700 dark:text-gray-200 focus:ring-1 focus:ring-nw-red outline-none"
+              >
+                <option value="All">All Assignees</option>
+                {uniqueAssignees.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end">
+              <button 
+                onClick={() => {
+                  setFilterPriority('All');
+                  setFilterStatus('All');
+                  setFilterAssignee('All');
+                  setSearchQuery('');
+                  setSelectedIP(null);
+                }}
+                className="text-xs text-nw-red hover:text-red-700 dark:hover:text-red-400 font-medium px-2 py-1.5"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard icon={AlertTriangle} label="Total Alerts" value={kpis.total} trendData={totalTrendData} trendColor="#3b82f6" />
+          <KPICard icon={AlertOctagon} label="Total Incidents" value={kpis.total} trendData={totalTrendData} trendColor="#3b82f6" />
           <KPICard icon={Activity} label="Critical / High" value={kpis.criticalHigh} color="text-red-500" trendData={criticalHighTrendData} trendColor="#ef4444" />
-          <KPICard icon={Shield} label="Unique Rules" value={kpis.uniqueRules} />
-          <KPICard icon={Target} label="Top IP Triggered" value={kpis.topIP} />
+          <KPICard icon={Shield} label="Open Incidents" value={kpis.openIncidents} color="text-yellow-500" />
+          <KPICard icon={Target} label="Top IP Impacted" value={kpis.topIP} />
         </div>
       </div>
 
@@ -704,8 +969,8 @@ export default function AlertsDashboard({ host, port, username, password, isDark
 
         {!queryTrigger ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
-            <ShieldAlert className="w-12 h-12 mb-4 opacity-50" />
-            <p>Click "Run Query" in the sidebar to fetch alerts.</p>
+            <AlertOctagon className="w-12 h-12 mb-4 opacity-50" />
+            <p>Click "Run Query" in the sidebar to fetch incidents.</p>
           </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -717,11 +982,11 @@ export default function AlertsDashboard({ host, port, username, password, isDark
             {/* Left Column: Dashlets & Table */}
             <div className="flex-1 flex flex-col gap-6 min-w-0">
               
-              {/* Row 1: Volume Trend & Severity */}
+              {/* Row 1: Volume Trend & Status */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-none h-[220px]">
                 {/* Stacked Area Chart */}
                 <div className="lg:col-span-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Alert Trends</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Incident Trends</h3>
                   <div className="flex-1 min-h-0">
                     <ReactECharts 
                       option={{
@@ -747,10 +1012,10 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                           splitLine: { lineStyle: { color: isDark ? '#374151' : '#e5e7eb', type: 'dashed', opacity: 0.5 } }
                         },
                         series: [
-                          { name: 'Low', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[1], data: volumeData.map(d => d.Low) },
-                          { name: 'Medium', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[2], data: volumeData.map(d => d.Medium) },
-                          { name: 'High', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[3], data: volumeData.map(d => d.High) },
-                          { name: 'Critical', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: SEVERITY_COLORS[4], data: volumeData.map(d => d.Critical) }
+                          { name: 'Low', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: PRIORITY_COLORS['Low'], data: volumeData.map(d => d.Low) },
+                          { name: 'Medium', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: PRIORITY_COLORS['Medium'], data: volumeData.map(d => d.Medium) },
+                          { name: 'High', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: PRIORITY_COLORS['High'], data: volumeData.map(d => d.High) },
+                          { name: 'Critical', type: 'line', stack: 'Total', areaStyle: { opacity: 0.6 }, smooth: true, showSymbol: false, color: PRIORITY_COLORS['Critical'], data: volumeData.map(d => d.Critical) }
                         ]
                       }}
                       style={{ height: '100%', width: '100%' }}
@@ -759,11 +1024,11 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                   </div>
                 </div>
 
-                {/* Severity Donut */}
+                {/* Status Donut */}
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Severity</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2">Status</h3>
                   <div className="flex-1 min-h-0 relative">
-                    {severityData.length === 0 ? (
+                    {statusData.length === 0 ? (
                       <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-500">No Data</div>
                     ) : (
                       <ReactECharts 
@@ -783,7 +1048,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                               label: { show: false, position: 'center' },
                               emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold', color: isDark ? '#fff' : '#000' } },
                               labelLine: { show: false },
-                              data: severityData.map(d => ({ value: d.value, name: d.name, itemStyle: { color: d.color } }))
+                              data: statusData.map(d => ({ value: d.value, name: d.name, itemStyle: { color: d.color } }))
                             }
                           ]
                         }}
@@ -795,55 +1060,9 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                 </div>
               </div>
 
-              {/* Row 2: Top Alerts, MITRE, & Assets */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-none h-[220px]">
+              {/* Row 2: MITRE & Assets */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-none h-[220px]">
                 
-                {/* Top Alert Names */}
-                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 truncate">Top Signatures Triggered</h3>
-                  <div className="flex-1 min-h-0">
-                    <ReactECharts 
-                      option={{
-                        tooltip: {
-                          trigger: 'axis',
-                          axisPointer: { type: 'shadow' },
-                          backgroundColor: isDark ? '#111827' : '#ffffff',
-                          borderColor: isDark ? '#374151' : '#e5e7eb',
-                          textStyle: { color: isDark ? '#d1d5db' : '#374151' },
-                          formatter: (params: any) => {
-                            const param = params[0];
-                            const dataItem = topAlertsData[param.dataIndex];
-                            const displayLabel = /^[T][A\d]/.test(dataItem.fullName) ? getMitreName(dataItem.fullName) : dataItem.fullName;
-                            return `<div class="font-semibold mb-1">${displayLabel}</div><div class="text-gray-500">Count: <span class="font-bold text-gray-900 dark:text-white">${param.value}</span></div>`;
-                          }
-                        },
-                        grid: { top: 0, right: 20, bottom: 0, left: 0, containLabel: true },
-                        xAxis: { type: 'value', show: false },
-                        yAxis: {
-                          type: 'category',
-                          data: topAlertsData.map(d => d.name),
-                          axisLabel: { color: '#6b7280', fontSize: 11, width: 160, overflow: 'truncate' },
-                          axisLine: { show: false },
-                          axisTick: { show: false }
-                        },
-                        series: [
-                          {
-                            type: 'bar',
-                            data: topAlertsData.map((d, i) => ({ value: d.count, itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] } })),
-                            itemStyle: { borderRadius: [0, 4, 4, 0] },
-                            barWidth: 16
-                          }
-                        ]
-                      }}
-                      onEvents={{
-                        click: (params: any) => handleBarClick({ name: topAlertsData[params.dataIndex].fullName })
-                      }}
-                      style={{ height: '100%', width: '100%' }}
-                      opts={{ renderer: 'canvas' }}
-                    />
-                  </div>
-                </div>
-
                 {/* MITRE Tactics */}
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 truncate">Top MITRE Tactics</h3>
@@ -896,7 +1115,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
 
                 {/* Top Impacted Assets */}
                 <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4 flex flex-col">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 truncate">Top Impacted Assets</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-2 truncate">Top Impacted IPs</h3>
                   <div className="flex-1 min-h-0">
                     {topAssetsData.length === 0 ? (
                       <div className="h-full flex items-center justify-center text-xs text-gray-500">No asset data found.</div>
@@ -948,7 +1167,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
               {/* Table Section */}
               <div className="flex-1 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col min-h-[300px]">
                 <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center flex-none">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Alert Feed</h3>
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Incident Feed</h3>
                   
                   {selectedIP && (
                     <div className="flex items-center gap-2 px-3 py-1 bg-nw-red/10 text-nw-red rounded-full text-xs font-medium">
@@ -966,52 +1185,66 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                     <thead className="sticky top-0 bg-gray-50 dark:bg-gray-800/50 text-xs uppercase text-gray-500 dark:text-gray-400 z-10">
                       <tr>
                         <th className="px-4 py-3 font-medium w-32">Time</th>
-                        <th className="px-4 py-3 font-medium w-24">Severity</th>
-                        <th className="px-4 py-3 font-medium w-64">Name</th>
-                        <th className="px-4 py-3 font-medium w-40">Source</th>
-                        <th className="px-4 py-3 font-medium w-40">Dest</th>
+                        <th className="px-4 py-3 font-medium w-24">Priority</th>
+                        <th className="px-4 py-3 font-medium w-24">Status</th>
+                        <th className="px-4 py-3 font-medium w-32">Assignee</th>
+                        <th className="px-4 py-3 font-medium w-64">Title</th>
+                        <th className="px-4 py-3 font-medium w-20">Alerts</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-800 text-sm">
-                      {filteredAlerts.length === 0 ? (
+                      {filteredIncidents.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                            <p>No alerts found matching the current filters.</p>
+                          <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                            <p>No incidents found matching the current filters.</p>
                           </td>
                         </tr>
                       ) : (
-                        filteredAlerts.map((alert) => {
-                          const firstEvent = alert.events?.[0] || {};
-                          const srcId = getSourceIdentity(firstEvent);
-                          const dstId = getDestIdentity(firstEvent);
+                        filteredIncidents.map((incident) => {
+                          const priorityColor = PRIORITY_COLORS[incident.priority] || '#9ca3af';
+                          const statusColor = STATUS_COLORS[incident.status] || '#9ca3af';
 
                           return (
                             <tr 
-                              key={alert.id} 
-                              onClick={() => setSelectedAlertDetails(alert)}
+                              key={incident.id} 
+                              onClick={() => setSelectedIncidentDetails(incident)}
                               className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors group cursor-pointer"
                             >
                               <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap truncate">
-                                {formatDateSafe(alert)}
+                                {formatDateSafe(incident)}
                               </td>
                               <td className="px-4 py-3 truncate">
                                 <span 
                                   className="px-2 py-1 rounded-md text-xs font-medium"
                                   style={{ 
-                                    backgroundColor: `${SEVERITY_COLORS[alert.severity]}20`,
-                                    color: SEVERITY_COLORS[alert.severity] 
+                                    backgroundColor: `${priorityColor}20`,
+                                    color: priorityColor 
                                   }}
                                 >
-                                  {SEVERITY_LABELS[alert.severity] || 'Unknown'}
+                                  {incident.priority}
                                 </span>
                               </td>
+                              <td className="px-4 py-3 truncate">
+                                <span 
+                                  className="px-2 py-1 rounded-md text-xs font-medium"
+                                  style={{ 
+                                    backgroundColor: `${statusColor}20`,
+                                    color: statusColor 
+                                  }}
+                                >
+                                  {incident.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 truncate text-gray-500 dark:text-gray-400">
+                                {incident.assignee || 'Unassigned'}
+                              </td>
                               <td className="px-4 py-3">
-                                <div className="font-medium text-gray-900 dark:text-gray-200 truncate" title={alert.moduleName}>
-                                  {alert.moduleName}
+                                <div className="font-medium text-gray-900 dark:text-gray-200 truncate" title={incident.title}>
+                                  {incident.title}
                                 </div>
-                                {(alert.tactics?.length || alert.techniques?.length) ? (
+                                {(incident.tactics?.length || incident.techniques?.length) ? (
                                   <div className="flex flex-wrap gap-1 mt-1.5">
-                                    {alert.tactics?.map(tactic => (
+                                    {incident.tactics?.map(tactic => (
                                       <span 
                                         key={tactic} 
                                         title={`Tactic: ${getMitreName(tactic)}`}
@@ -1020,7 +1253,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                         {tactic}
                                       </span>
                                     ))}
-                                    {alert.techniques?.map(tech => (
+                                    {incident.techniques?.map(tech => (
                                       <span 
                                         key={tech} 
                                         title={`Technique: ${getMitreName(tech)}`}
@@ -1032,27 +1265,8 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                   </div>
                                 ) : null}
                               </td>
-                              <td className="px-4 py-3 truncate" onClick={(e) => e.stopPropagation()}>
-                                {srcId ? (
-                                  <button 
-                                    onClick={() => setSelectedIP(srcId)}
-                                    className={`hover:text-nw-red transition-colors truncate w-full text-left ${selectedIP === srcId ? 'text-nw-red font-semibold' : 'text-gray-600 dark:text-gray-300'}`}
-                                    title={srcId}
-                                  >
-                                    {srcId}
-                                  </button>
-                                ) : <span className="text-gray-500">-</span>}
-                              </td>
-                              <td className="px-4 py-3 truncate" onClick={(e) => e.stopPropagation()}>
-                                {dstId ? (
-                                  <button 
-                                    onClick={() => setSelectedIP(dstId)}
-                                    className={`hover:text-nw-red transition-colors truncate w-full text-left ${selectedIP === dstId ? 'text-nw-red font-semibold' : 'text-gray-600 dark:text-gray-300'}`}
-                                    title={dstId}
-                                  >
-                                    {dstId}
-                                  </button>
-                                ) : <span className="text-gray-500">-</span>}
+                              <td className="px-4 py-3 truncate text-gray-500 dark:text-gray-400">
+                                {incident.alertCount}
                               </td>
                             </tr>
                           );
@@ -1068,75 +1282,19 @@ export default function AlertsDashboard({ host, port, username, password, isDark
             <div className="w-full lg:w-80 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 flex flex-col h-[600px] lg:h-auto flex-none">
               <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
                 <Clock className="w-4 h-4 text-gray-500" />
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Alert Timeline</h3>
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Incident Timeline</h3>
               </div>
               
               <div className="flex-1 overflow-y-auto p-4">
                 <div className="relative border-l-2 border-gray-200 dark:border-gray-800 ml-3 space-y-6 pb-4">
-                  {filteredAlerts.slice(0, 50).map((alert, idx) => {
-                    const firstEvent = alert.events?.[0] || {};
-                    const color = SEVERITY_COLORS[alert.severity] || '#9ca3af';
-                    const srcId = getSourceIdentity(firstEvent);
-                    const dstId = getDestIdentity(firstEvent);
-                    
-                    // Helper to safely extract the first available field that isn't null or '-'
-                    const getField = (keys: string[]) => {
-                      for (const k of keys) {
-                        const val = firstEvent[k];
-                        if (val && val !== '-') {
-                          return {
-                            key: k,
-                            value: Array.isArray(val) ? val : [String(val)]
-                          };
-                        }
-                      }
-                      return null;
-                    };
-
-                    // Extract requested context fields
-                    const domainObj = getField(['domain', 'domain_dst', 'domain_src']);
-                    const userObj = getField(['username', 'user_src', 'user_dst', 'ad_username_src', 'ad_username_dst']);
-                    const fileObj = getField(['filename', 'attachment']);
-                    const countrySrcObj = getField(['country_src']);
-                    const countryDstObj = getField(['country_dst']);
-                    const sslCaObj = getField(['ssl_ca']);
-                    const sslSubjectObj = getField(['ssl_subject']);
-                    const clientObj = getField(['client']);
-
-                    const formatTooltip = (obj: { key: string, value: string[] } | null, label: string) => {
-                      if (!obj) return '';
-                      const valuesStr = obj.value.length > 1 ? `\n  - ${obj.value.join('\n  - ')}` : ` ${obj.value[0]}`;
-                      return `${label}:${valuesStr}`;
-                    };
-
-                    const formatDisplay = (obj: { key: string, value: string[] } | null) => {
-                      if (!obj) return '';
-                      return obj.value.length > 1 ? `${obj.value[0]} (+${obj.value.length - 1})` : obj.value[0];
-                    };
-
-                    const domainStr = formatDisplay(domainObj);
-                    const userStr = formatDisplay(userObj);
-                    const fileStr = formatDisplay(fileObj);
-                    const sslCaStr = formatDisplay(sslCaObj);
-                    const sslSubjectStr = formatDisplay(sslSubjectObj);
-                    const clientStr = formatDisplay(clientObj);
-
-                    // Format country (show direction if both exist and differ, else just show the one available)
-                    let countryStr = null;
-                    let countryTooltip = '';
-                    if (countrySrcObj && countryDstObj && countrySrcObj.value[0] !== countryDstObj.value[0]) {
-                      countryStr = `${countrySrcObj.value[0]} → ${countryDstObj.value[0]}`;
-                      countryTooltip = `Country: ${countrySrcObj.value[0]} → ${countryDstObj.value[0]}`;
-                    } else if (countrySrcObj || countryDstObj) {
-                      countryStr = countrySrcObj ? countrySrcObj.value[0] : (countryDstObj ? countryDstObj.value[0] : null);
-                      countryTooltip = formatTooltip(countrySrcObj || countryDstObj, 'Country');
-                    }
+                  {filteredIncidents.slice(0, 50).map((incident, idx) => {
+                    const color = PRIORITY_COLORS[incident.priority] || '#9ca3af';
                     
                     return (
                       <div 
-                        key={`${alert.id}-${idx}`} 
+                        key={`${incident.id}-${idx}`} 
                         className="relative pl-6 group cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 -ml-2 rounded-lg transition-colors"
-                        onClick={() => setSelectedAlertDetails(alert)}
+                        onClick={() => setSelectedIncidentDetails(incident)}
                       >
                         <div 
                           className="absolute left-[-1px] top-3 w-4 h-4 rounded-full border-4 border-white dark:border-gray-900"
@@ -1145,16 +1303,16 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                         
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatDistanceToNow(getAlertTimeSafe(alert), { addSuffix: true })} ({format(getAlertTimeSafe(alert), 'yyyy-MM-dd HH:mm:ss')})
+                            {formatDistanceToNow(getIncidentTimeSafe(incident), { addSuffix: true })} ({format(getIncidentTimeSafe(incident), 'yyyy-MM-dd HH:mm:ss')})
                           </span>
                           <h4 className="text-sm font-medium text-gray-900 dark:text-white leading-tight">
-                            {alert.moduleName}
+                            {incident.title}
                           </h4>
 
                           {/* MITRE Tags */}
-                          {(alert.tactics?.length || alert.techniques?.length) ? (
+                          {(incident.tactics?.length || incident.techniques?.length) ? (
                             <div className="flex flex-wrap gap-1 mt-1">
-                                {alert.tactics?.map(tactic => (
+                                {incident.tactics?.map(tactic => (
                                     <span 
                                       key={tactic} 
                                       title={`Tactic: ${getMitreName(tactic)}`}
@@ -1163,7 +1321,7 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                         {tactic}
                                     </span>
                                 ))}
-                                {alert.techniques?.map(tech => (
+                                {incident.techniques?.map(tech => (
                                     <span 
                                       key={tech} 
                                       title={`Technique: ${getMitreName(tech)}`}
@@ -1174,75 +1332,16 @@ export default function AlertsDashboard({ host, port, username, password, isDark
                                 ))}
                             </div>
                           ) : null}
-
-                          {/* Extracted Context Badges */}
-                          {(domainStr || userStr || fileStr || countryStr || sslCaStr || sslSubjectStr || clientStr) && (
-                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              {userStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(userObj, 'User')}>
-                                  <User className="w-3 h-3 flex-none" />
-                                  <span className="truncate max-w-[120px]">{userStr}</span>
-                                </span>
-                              )}
-                              {domainStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(domainObj, 'Domain')}>
-                                  <Globe className="w-3 h-3 flex-none" />
-                                  <span className="truncate max-w-[120px]">{domainStr}</span>
-                                </span>
-                              )}
-                              {fileStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(fileObj, 'File')}>
-                                  <FileText className="w-3 h-3 flex-none" />
-                                  <span className="truncate max-w-[120px]">{fileStr}</span>
-                                </span>
-                              )}
-                              {countryStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={countryTooltip}>
-                                  <MapPin className="w-3 h-3 flex-none" />
-                                  <span className="truncate max-w-[120px]">{countryStr}</span>
-                                </span>
-                              )}
-                              {sslCaStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(sslCaObj, 'SSL CA')}>
-                                  <Lock className="w-3 h-3 flex-none" />
-                                  <span className="truncate max-w-[120px]">{sslCaStr}</span>
-                                </span>
-                              )}
-                              {sslSubjectStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(sslSubjectObj, 'SSL Subject')}>
-                                  <Lock className="w-3 h-3 flex-none" />
-                                  <span className="truncate max-w-[120px]">{sslSubjectStr}</span>
-                                </span>
-                              )}
-                              {clientStr && (
-                                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded text-[10px] font-medium border border-gray-200 dark:border-gray-700 whitespace-pre" title={formatTooltip(clientObj, 'Client')}>
-                                  <Monitor className="w-3 h-3 flex-none" />
-                                  <span className="truncate max-w-[120px]">{clientStr}</span>
-                                </span>
-                              )}
-                            </div>
-                          )}
                           
-                          {/* Source -> Dest Identities */}
-                          {(srcId || dstId) && (
-                            <div className="flex items-center gap-2 mt-2 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 p-2 rounded-md border border-gray-100 dark:border-gray-800">
-                              {srcId && (
-                                <span className="truncate max-w-[100px]" title={srcId}>{srcId}</span>
-                              )}
-                              {srcId && dstId && (
-                                <ArrowRight className="w-3 h-3 flex-none text-gray-400" />
-                              )}
-                              {dstId && (
-                                <span className="truncate max-w-[100px]" title={dstId}>{dstId}</span>
-                              )}
-                            </div>
-                          )}
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Status: {incident.status} | Alerts: {incident.alertCount}
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                   
-                  {filteredAlerts.length === 0 && (
+                  {filteredIncidents.length === 0 && (
                     <div className="pl-6 text-sm text-gray-500">No events to display</div>
                   )}
                 </div>

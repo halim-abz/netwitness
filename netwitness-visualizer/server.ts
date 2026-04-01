@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import https from "https";
@@ -29,6 +30,77 @@ async function startServer() {
       }
     } catch (error: any) {
       res.status(500).json({ error: "Failed to read RSS feeds config", details: error.message });
+    }
+  });
+
+  app.get("/api/dashboards", (req, res) => {
+    try {
+      const dashboardsDir = path.join(process.cwd(), "dashboards");
+      if (!fs.existsSync(dashboardsDir)) {
+        fs.mkdirSync(dashboardsDir, { recursive: true });
+        // Create a default dashboard file if the directory is empty
+        const defaultDashboard = {
+          id: 'default-dashboard',
+          name: 'Default Dashboard',
+          isDefault: true,
+          dashlets: [
+            {
+              id: 'default-1',
+              title: 'Top Services',
+              query: 'service exists',
+              fieldName: 'service',
+              timeRange: '1h',
+              size: 10000,
+              visualizationType: 'bar',
+              valueType: 'sessions',
+              sortOrder: 'order-descending'
+            },
+            {
+              id: 'default-2',
+              title: 'Top Source Countries',
+              query: 'country.src exists',
+              fieldName: 'country.src',
+              timeRange: '1h',
+              size: 10000,
+              visualizationType: 'pie',
+              valueType: 'sessions',
+              sortOrder: 'order-descending'
+            }
+          ]
+        };
+        fs.writeFileSync(path.join(dashboardsDir, "default-dashboard.json"), JSON.stringify(defaultDashboard, null, 2));
+      }
+
+      const files = fs.readdirSync(dashboardsDir).filter(f => f.endsWith('.json'));
+      const dashboards = [];
+      
+      for (const file of files) {
+        try {
+          const content = fs.readFileSync(path.join(dashboardsDir, file), 'utf-8');
+          const parsed = JSON.parse(content);
+          if (parsed && typeof parsed === 'object') {
+            parsed.isDefault = true;
+            if (Array.isArray(parsed)) {
+              dashboards.push({
+                id: `backend-${file}`,
+                name: file.replace('.json', ''),
+                isDefault: true,
+                dashlets: parsed
+              });
+            } else if (Array.isArray(parsed.dashlets)) {
+              if (!parsed.id) parsed.id = `backend-${file}`;
+              dashboards.push(parsed);
+            }
+          }
+        } catch (err) {
+          console.error(`Error reading dashboard file ${file}:`, err);
+        }
+      }
+      
+      res.json(dashboards);
+    } catch (error: any) {
+      console.error("Error reading dashboards:", error);
+      res.status(500).json({ error: "Failed to read dashboards", details: error.message });
     }
   });
 
@@ -112,13 +184,71 @@ async function startServer() {
       const alertsUrl = `https://${hostWithPort}/rest/api/alerts${sinceParam}`;
 
       try {
-        const alertsData = await makeRequest(alertsUrl, {
+        let alertsData = await makeRequest(alertsUrl, {
           method: 'GET',
           headers: {
             'NetWitness-Token': token,
             'Accept': 'application/json'
           }
         });
+
+        // Parse filters from environment variable
+        // Format: "username:metakey:metavalue,username2:metakey2:metavalue2"
+        const rawFilters = process.env.VITE_NW_ALERTS_FILTERS || "";
+        const userFilters: Record<string, { metakey: string, metavalue: string }> = {};
+        
+        rawFilters.split(',').forEach(rule => {
+          const parts = rule.split(':');
+          if (parts.length >= 3) {
+            const u = parts[0].trim().toLowerCase();
+            const k = parts[1].trim();
+            const v = parts.slice(2).join(':').trim(); // in case metavalue has colons
+            userFilters[u] = { metakey: k, metavalue: v };
+          }
+        });
+
+        const filterConfig = username ? userFilters[username.toLowerCase()] : undefined;
+        console.log(`[Alerts Filter] User: ${username}, Raw Filters: ${rawFilters}, Config:`, filterConfig);
+
+        if (filterConfig) {
+          const { metakey, metavalue } = filterConfig;
+          
+          let rawItems: any[] = [];
+          if (alertsData && Array.isArray(alertsData.items)) {
+            rawItems = alertsData.items;
+          } else if (Array.isArray(alertsData)) {
+            rawItems = alertsData;
+          }
+
+          const filteredItems = rawItems.filter((item: any) => {
+            const originalAlert = item.originalAlert || {};
+            const events = originalAlert.events || item.events || [];
+            
+            const checkValue = (val: any) => {
+              if (Array.isArray(val)) {
+                return val.includes(metavalue);
+              }
+              return val === metavalue;
+            };
+
+            if (checkValue(item[metakey]) || checkValue(originalAlert[metakey])) {
+              return true;
+            }
+            
+            if (Array.isArray(events)) {
+              return events.some((event: any) => checkValue(event[metakey]));
+            }
+            
+            return false;
+          });
+
+          if (alertsData && Array.isArray(alertsData.items)) {
+            alertsData.items = filteredItems;
+          } else if (Array.isArray(alertsData)) {
+            alertsData = filteredItems;
+          }
+        }
+
         res.json(alertsData);
       } catch (err: any) {
         return res.status(err.status || 500).json({ error: "Failed to fetch alerts", details: err.data || err.message });
@@ -126,6 +256,228 @@ async function startServer() {
 
     } catch (error: any) {
       console.error("Error fetching alerts:", error);
+      res.status(500).json({ error: "Internal server error", details: error.message });
+    }
+  });
+
+  app.post("/api/incidents", async (req, res) => {
+    try {
+      const { host, port, username, password, since } = req.body;
+      
+      if (!host || !username || !password) {
+        return res.status(400).json({ 
+          error: "Missing connection details. Please check host, username, and password." 
+        });
+      }
+
+      const hostWithPort = port ? `${host}:${port}` : host;
+      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+      const makeRequest = (url: string, options: any, postData?: string) => {
+        return new Promise<any>((resolve, reject) => {
+          const req = https.request(url, { ...options, agent: httpsAgent }, (response) => {
+            let data = '';
+            response.on('data', (chunk) => { data += chunk; });
+            response.on('end', () => {
+              if (response.statusCode && response.statusCode >= 400) {
+                reject({ status: response.statusCode, data });
+              } else {
+                try {
+                  resolve(JSON.parse(data));
+                } catch (e) {
+                  resolve(data);
+                }
+              }
+            });
+          });
+          req.on('error', reject);
+          if (postData) {
+            req.write(postData);
+          }
+          req.end();
+        });
+      };
+
+      // 1. Authenticate to get token
+      const authUrl = `https://${hostWithPort}/rest/api/auth/userpass?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+      
+      let token;
+      try {
+        const authData = await makeRequest(authUrl, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json;charset=UTF-8',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=ISO-8859-1'
+          }
+        });
+        token = authData.accessToken;
+      } catch (err: any) {
+        return res.status(err.status || 500).json({ error: "Authentication failed", details: err.data || err.message });
+      }
+
+      if (!token) {
+        return res.status(401).json({ error: "Failed to retrieve access token" });
+      }
+
+      // 2. Fetch incidents
+      const sinceParam = since ? `?since=${encodeURIComponent(since)}` : '';
+      const incidentsUrl = `https://${hostWithPort}/rest/api/incidents${sinceParam}`;
+
+      try {
+        let incidentsData = await makeRequest(incidentsUrl, {
+          method: 'GET',
+          headers: {
+            'NetWitness-Token': token,
+            'Accept': 'application/json'
+          }
+        });
+
+        // 3. Apply User-Based Filtering
+        const rawFilters = process.env.VITE_NW_ALERTS_FILTERS || "";
+        const userFilters: Record<string, { metakey: string, metavalue: string }> = {};
+        
+        rawFilters.split(',').forEach(rule => {
+          const parts = rule.split(':');
+          if (parts.length >= 3) {
+            const u = parts[0].trim().toLowerCase();
+            const k = parts[1].trim();
+            const v = parts.slice(2).join(':').trim(); // in case metavalue has colons
+            userFilters[u] = { metakey: k, metavalue: v };
+          }
+        });
+
+        const filterConfig = username ? userFilters[username.toLowerCase()] : undefined;
+
+        if (filterConfig) {
+          const { metakey, metavalue } = filterConfig;
+          
+          let rawItems: any[] = [];
+          if (incidentsData && Array.isArray(incidentsData.items)) {
+            rawItems = incidentsData.items;
+          } else if (Array.isArray(incidentsData)) {
+            rawItems = incidentsData;
+          }
+
+          const filteredItems = rawItems.filter((item: any) => {
+            const checkValue = (val: any) => {
+              if (typeof val === 'string') {
+                return val.split(',').map(s => s.trim()).includes(metavalue);
+              }
+              if (Array.isArray(val)) {
+                return val.some(v => {
+                  if (typeof v === 'string') {
+                    return v.split(',').map(s => s.trim()).includes(metavalue);
+                  }
+                  return v === metavalue;
+                });
+              }
+              return val === metavalue;
+            };
+
+            if (checkValue(item[metakey]) || (item.alertMeta && checkValue(item.alertMeta[metakey]))) {
+              return true;
+            }
+            
+            return false;
+          });
+
+          if (incidentsData && Array.isArray(incidentsData.items)) {
+            incidentsData.items = filteredItems;
+          } else if (Array.isArray(incidentsData)) {
+            incidentsData = filteredItems;
+          }
+        }
+
+        res.json(incidentsData);
+      } catch (err: any) {
+        return res.status(err.status || 500).json({ error: "Failed to fetch incidents", details: err.data || err.message });
+      }
+
+    } catch (error: any) {
+      console.error("Error fetching incidents:", error);
+      res.status(500).json({ error: "Internal server error", details: error.message });
+    }
+  });
+
+  app.post("/api/incidents/:id/alerts", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { host, port, username, password } = req.body;
+      
+      if (!host || !username || !password) {
+        return res.status(400).json({ 
+          error: "Missing connection details. Please check host, username, and password." 
+        });
+      }
+
+      const hostWithPort = port ? `${host}:${port}` : host;
+      const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+
+      const makeRequest = (url: string, options: any, postData?: string) => {
+        return new Promise<any>((resolve, reject) => {
+          const req = https.request(url, { ...options, agent: httpsAgent }, (response) => {
+            let data = '';
+            response.on('data', (chunk) => { data += chunk; });
+            response.on('end', () => {
+              if (response.statusCode && response.statusCode >= 400) {
+                reject({ status: response.statusCode, data });
+              } else {
+                try {
+                  resolve(JSON.parse(data));
+                } catch (e) {
+                  resolve(data);
+                }
+              }
+            });
+          });
+          req.on('error', reject);
+          if (postData) {
+            req.write(postData);
+          }
+          req.end();
+        });
+      };
+
+      // 1. Authenticate to get token
+      const authUrl = `https://${hostWithPort}/rest/api/auth/userpass?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+      
+      let token;
+      try {
+        const authData = await makeRequest(authUrl, {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json;charset=UTF-8',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=ISO-8859-1'
+          }
+        });
+        token = authData.accessToken;
+      } catch (err: any) {
+        return res.status(err.status || 500).json({ error: "Authentication failed", details: err.data || err.message });
+      }
+
+      if (!token) {
+        return res.status(401).json({ error: "Failed to retrieve access token" });
+      }
+
+      // 2. Fetch incident alerts
+      const incidentAlertsUrl = `https://${hostWithPort}/rest/api/incidents/${encodeURIComponent(id)}/alerts`;
+
+      try {
+        const alertsData = await makeRequest(incidentAlertsUrl, {
+          method: 'GET',
+          headers: {
+            'NetWitness-Token': token,
+            'Accept': 'application/json'
+          }
+        });
+
+        res.json(alertsData);
+      } catch (err: any) {
+        return res.status(err.status || 500).json({ error: "Failed to fetch incident alerts", details: err.data || err.message });
+      }
+
+    } catch (error: any) {
+      console.error("Error fetching incident alerts:", error);
       res.status(500).json({ error: "Internal server error", details: error.message });
     }
   });

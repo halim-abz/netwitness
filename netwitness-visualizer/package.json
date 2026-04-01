@@ -23,6 +23,7 @@
     "d3": "^7.9.0",
     "date-fns": "^4.1.0",
     "dompurify": "^3.3.3",
+    "dotenv": "^17.3.1",
     "echarts": "^6.0.0",
     "echarts-for-react": "^3.0.6",
     "express": "^4.21.2",

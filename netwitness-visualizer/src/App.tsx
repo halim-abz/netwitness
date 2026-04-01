@@ -13,7 +13,7 @@ import NetworkGraph from "./components/NetworkGraph";
 import GlobeView from "./components/GlobeView";
 import ThreatNews from "./components/ThreatNews";
 import AssetsView from "./components/AssetsView";
-import AlertsDashboard from "./components/AlertsDashboard";
+import AlertsIncidentsDashboard from "./components/AlertsIncidentsDashboard";
 import CustomDashboard from "./components/CustomDashboard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import DetailsPanel from "./components/DetailsPanel";
@@ -29,7 +29,7 @@ export interface Coordinates {
   lng: number;
 }
 
-type ViewMode = 'graph' | 'globe' | 'news' | 'assets' | 'alerts' | 'dashboard';
+type ViewMode = 'graph' | 'globe' | 'news' | 'assets' | 'alerts-incidents' | 'dashboard';
 
 // --- CONSTANTS & CONFIG ---
 
@@ -40,12 +40,13 @@ const ENABLE_GLOBE = import.meta.env.VITE_ENABLE_GLOBE !== 'false';
 const ENABLE_NEWS = import.meta.env.VITE_ENABLE_NEWS !== 'false';
 const ENABLE_ASSETS = import.meta.env.VITE_ENABLE_ASSETS !== 'false';
 const ENABLE_ALERTS = import.meta.env.VITE_ENABLE_ALERTS !== 'false';
+const ENABLE_INCIDENTS = import.meta.env.VITE_ENABLE_INCIDENTS !== 'false';
 const ENABLE_DASHBOARD = import.meta.env.VITE_ENABLE_DASHBOARD !== 'false';
 const FALLBACK_NAVIGATE_URL = import.meta.env.VITE_NW_NAVIGATE_URL;
 
 const VIEW_MODES = [
   { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', enabled: ENABLE_DASHBOARD },
-  { id: 'alerts', icon: ShieldAlert, label: 'Alerts', enabled: ENABLE_ALERTS },
+  { id: 'alerts-incidents', icon: ShieldAlert, label: 'Incidents', enabled: ENABLE_ALERTS || ENABLE_INCIDENTS },
   { id: 'assets', icon: Server, label: 'Assets', enabled: ENABLE_ASSETS },
   { id: 'graph', icon: Network, label: 'Graph', enabled: ENABLE_GRAPH },
   { id: 'globe', icon: Globe, label: 'Globe', enabled: ENABLE_GLOBE },
@@ -60,7 +61,7 @@ const getDefaultViewMode = (): ViewMode => {
       const params = new URLSearchParams(window.location.search);
       const view = params.get('view');
       if (view === 'dashboard' && ENABLE_DASHBOARD) return 'dashboard';
-      if (view === 'alerts' && ENABLE_ALERTS) return 'alerts';
+      if (view === 'alerts-incidents' && (ENABLE_ALERTS || ENABLE_INCIDENTS)) return 'alerts-incidents';
       if (view === 'assets' && ENABLE_ASSETS) return 'assets';
       if (view === 'graph' && ENABLE_GRAPH) return 'graph';
       if (view === 'globe' && ENABLE_GLOBE) return 'globe';
@@ -71,7 +72,7 @@ const getDefaultViewMode = (): ViewMode => {
   }
   
   if (ENABLE_DASHBOARD) return 'dashboard';
-  if (ENABLE_ALERTS) return 'alerts';
+  if (ENABLE_ALERTS || ENABLE_INCIDENTS) return 'alerts-incidents';
   if (ENABLE_ASSETS) return 'assets';
   if (ENABLE_GRAPH) return 'graph';
   if (ENABLE_GLOBE) return 'globe';
@@ -179,7 +180,7 @@ export default function App() {
   // --- REUSABLE UI ELEMENTS ---
 
   // Pre-construct the details panel to avoid JSX duplication
-  const detailsPanelElement = selectedItem && viewMode !== 'news' && viewMode !== 'assets' && viewMode !== 'alerts' && viewMode !== 'dashboard' ? (
+  const detailsPanelElement = selectedItem && viewMode !== 'news' && viewMode !== 'assets' && viewMode !== 'alerts-incidents' && viewMode !== 'dashboard' ? (
     <DetailsPanel
       selectedItem={selectedItem}
       onClose={() => setSelectedItem(null)}
@@ -304,9 +305,9 @@ export default function App() {
             <ErrorBoundary>
               <AssetsView data={graphData} isDark={isDark} />
             </ErrorBoundary>
-          ) : viewMode === 'alerts' ? (
+          ) : viewMode === 'alerts-incidents' ? (
             <ErrorBoundary>
-              <AlertsDashboard 
+              <AlertsIncidentsDashboard 
                 host={alertsConfig?.host || import.meta.env.VITE_NW_ALERTS_HOST || import.meta.env.VITE_NW_HOST || ''} 
                 port={alertsConfig?.port || import.meta.env.VITE_NW_ALERTS_PORT || import.meta.env.VITE_NW_PORT || ''}
                 username={alertsConfig?.username || import.meta.env.VITE_NW_ALERTS_USERNAME || import.meta.env.VITE_NW_USERNAME || ''} 

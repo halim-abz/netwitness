@@ -1,5 +1,5 @@
 {
   "name": "NetWitness Visualizer",
-  "description": "A web app that displays a network visualization map from NetWitness data.",
+  "description": "A web app to visualize data from NetWitness.",
   "requestFramePermissions": []
 }

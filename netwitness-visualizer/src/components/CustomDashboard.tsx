@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Trash2, Edit2, RefreshCw, LayoutDashboard, BarChart3, PieChart, LineChart, Table as TableIcon, Download, Upload, Activity, Radar as RadarIcon, ScatterChart as ScatterChartIcon, Layers, ZoomOut, GripVertical, AlertCircle, Lock } from 'lucide-react';
+import { Plus, Trash2, Edit2, RefreshCw, LayoutDashboard, BarChart3, PieChart, LineChart, Table as TableIcon, Download, Upload, Activity, Radar as RadarIcon, ScatterChart as ScatterChartIcon, Layers, ZoomOut, GripVertical, AlertCircle, Lock, ChevronDown, RotateCcw, Check, X } from 'lucide-react';
 import { QueryConfig } from './Sidebar';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, LineChart as RechartsLineChart, Line, AreaChart, Area, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Legend, ScatterChart, Scatter, ZAxis, ReferenceArea, RadialBarChart, RadialBar, Treemap } from 'recharts';
 import { formatDistanceToNow } from 'date-fns';
@@ -43,6 +43,13 @@ export interface DashletConfig {
   visualSize?: 'small' | 'medium' | 'large' | 'full';
   refreshInterval?: number;
   colorPalette?: string;
+}
+
+export interface DashboardConfig {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+  dashlets: DashletConfig[];
 }
 
 interface CustomDashboardProps {
@@ -221,7 +228,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
 
           const effectiveFreq = freq || (
             (range === '5m' || range === '15m' || range === '1h') ? '1m' :
-            (range === '6h' || range === '24h') ? '1h' : '1d'
+            (range === '3h' || range === '6h' || range === '24h') ? '1h' : '1d'
           );
 
           if (effectiveFreq === '1m') {
@@ -402,19 +409,48 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
       const colors = COLOR_PALETTES[config.colorPalette || 'default'] || COLOR_PALETTES.default;
       const primaryColor = colors[0];
       
-      const total = payload.reduce((sum: number, entry: any) => sum + (entry.value || 0), 0);
+      // Filter out X-axis labels and deduplicate by dataKey to fix Scatter chart tooltips
+      const uniquePayload: any[] = [];
+      const seenKeys = new Set();
+      let extractedLabel = label;
+      
+      payload.forEach((entry: any) => {
+        if (entry.dataKey === 'name' || entry.name === 'name') {
+          if (!extractedLabel && entry.value) {
+            extractedLabel = entry.value;
+          }
+          return;
+        }
+        
+        const key = entry.dataKey || entry.name;
+        if (!seenKeys.has(key)) {
+          seenKeys.add(key);
+          uniquePayload.push(entry);
+        }
+      });
+      
+      const total = uniquePayload.reduce((sum: number, entry: any) => {
+        const val = entry.dataKey === '_displayValue' ? entry.payload.value : entry.value;
+        return sum + (typeof val === 'number' ? val : 0);
+      }, 0);
       
       return (
-        <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.4)] z-50 min-w-[220px] animate-in fade-in zoom-in-95 duration-200 ring-1 ring-black/5 dark:ring-white/5">
-          {label && (
+        <div className="bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border border-gray-200 dark:border-gray-800 p-3.5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.4)] min-w-[220px] animate-in fade-in zoom-in-95 duration-200 ring-1 ring-black/5 dark:ring-white/5">
+          {extractedLabel && (
             <div className="flex items-center justify-between mb-3 border-b border-gray-100 dark:border-gray-800/50 pb-2.5">
-              <p className="font-bold text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 truncate max-w-[180px]">{label}</p>
+              <p className="font-bold text-[10px] uppercase tracking-[0.15em] text-gray-400 dark:text-gray-500 truncate max-w-[180px]">{extractedLabel}</p>
             </div>
           )}
           <div className="space-y-2.5">
-            {payload.map((entry: any, index: number) => {
-              const displayName = entry.dataKey === '_displayValue' ? entry.payload.name : entry.name;
-              const displayValue = entry.dataKey === '_displayValue' ? entry.payload.value : entry.value;
+            {uniquePayload.map((entry: any, index: number) => {
+              let displayName = entry.dataKey === '_displayValue' ? entry.payload.name : entry.name;
+              if (displayName === 'value' || displayName === 'Value') {
+                displayName = config.valueType === 'size' ? 'Size' : 'Sessions';
+              }
+              
+              let displayValue = entry.dataKey === '_displayValue' ? entry.payload.value : entry.value;
+              if (Array.isArray(displayValue)) displayValue = displayValue[1];
+              const numericValue = Number(displayValue);
               
               let dotColor = entry.payload?._color || entry.color || entry.fill || primaryColor;
               if (dotColor && dotColor.startsWith('url(')) {
@@ -431,12 +467,12 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
                     <span className="text-[11px] text-gray-600 dark:text-gray-300 font-bold truncate max-w-[140px] group-hover/item:text-gray-900 dark:group-hover/item:text-white transition-colors">{displayName}</span>
                   </div>
                   <span className="text-[12px] font-bold text-gray-900 dark:text-white font-mono tabular-nums">
-                    {config.valueType === 'size' ? formatBytes(displayValue, 1) : displayValue.toLocaleString()}
+                    {config.valueType === 'size' ? formatBytes(numericValue, 1) : numericValue.toLocaleString()}
                   </span>
                 </div>
               );
             })}
-            {payload.length > 1 && (
+            {uniquePayload.length > 1 && (
               <div className="flex items-center justify-between gap-6 pt-3 mt-1.5 border-t border-gray-100 dark:border-gray-800/50">
                 <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-[0.1em]">Total</span>
                 <span className="text-[12px] font-bold text-[#BE3B37] font-mono tabular-nums">
@@ -624,7 +660,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <CartesianGrid vertical={false} stroke={isDark ? '#1E293B' : '#F1F5F9'} strokeDasharray="0" />
               <XAxis dataKey="name" tickFormatter={formatXAxisTick} {...commonAxisProps} angle={-45} textAnchor="end" height={60} interval="preserveStartEnd" />
               <YAxis {...commonAxisProps} tickFormatter={formatYAxisTick} />
-              <Tooltip cursor={{ fill: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)' }} content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} cursor={{ fill: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)' }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {refAreaLeft && refAreaRight ? (
                 <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill={primaryColor} fillOpacity={0.1} />
@@ -662,7 +698,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
                   <Cell key={`cell-${index}`} fill={hiddenSeries.has(_entry.name) ? (isDark ? '#374151' : '#E5E7EB') : `url(#pie-grad-${config.id}-${index % colors.length})`} fillOpacity={1} />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
             </RechartsPieChart>
           </ResponsiveContainer>
@@ -697,7 +733,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
                   <Cell key={`cell-${index}`} fill={hiddenSeries.has(_entry.name) ? (isDark ? '#374151' : '#E5E7EB') : `url(#pie-grad-${config.id}-${index % colors.length})`} fillOpacity={1} />
                 ))}
               </Pie>
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
             </RechartsPieChart>
           </ResponsiveContainer>
@@ -715,7 +751,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <CartesianGrid vertical={false} stroke={isDark ? '#1E293B' : '#F1F5F9'} strokeDasharray="0" />
               <XAxis dataKey="name" tickFormatter={formatXAxisTick} {...commonAxisProps} angle={-45} textAnchor="end" height={60} interval="preserveStartEnd" />
               <YAxis {...commonAxisProps} tickFormatter={formatYAxisTick} />
-              <Tooltip cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {refAreaLeft && refAreaRight ? (
                 <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill={primaryColor} fillOpacity={0.1} />
@@ -738,7 +774,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <CartesianGrid vertical={false} stroke={isDark ? '#1E293B' : '#F1F5F9'} strokeDasharray="0" />
               <XAxis dataKey="name" tickFormatter={formatXAxisTick} {...commonAxisProps} angle={-45} textAnchor="end" height={60} interval="preserveStartEnd" />
               <YAxis {...commonAxisProps} tickFormatter={formatYAxisTick} />
-              <Tooltip cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {refAreaLeft && refAreaRight ? (
                 <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill={primaryColor} fillOpacity={0.1} />
@@ -754,7 +790,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <PolarGrid stroke={isDark ? '#1E293B' : '#F1F5F9'} />
               <PolarAngleAxis dataKey="name" tick={{ fill: isDark ? '#94A3B8' : '#64748B', fontSize: 9, fontWeight: 500 }} />
               <PolarRadiusAxis angle={30} domain={[0, 'auto']} tick={{ fontSize: 9, fill: isDark ? '#94A3B8' : '#64748B', fontWeight: 500 }} tickFormatter={(tick: any) => formatYAxisTick(tick)} axisLine={false} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {renderSeries()}
             </RadarChart>
@@ -773,7 +809,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <XAxis dataKey="name" type="category" allowDuplicatedCategory={false} tickFormatter={formatXAxisTick} {...commonAxisProps} angle={-45} textAnchor="end" height={60} interval="preserveStartEnd" />
               <YAxis dataKey="value" {...commonAxisProps} tickFormatter={formatYAxisTick} />
               <ZAxis dataKey="value" range={[50, 400]} />
-              <Tooltip cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} cursor={{ strokeDasharray: '3 3' }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {refAreaLeft && refAreaRight ? (
                 <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill={primaryColor} fillOpacity={0.1} />
@@ -805,7 +841,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <CartesianGrid vertical={false} stroke={isDark ? '#1E293B' : '#F1F5F9'} strokeDasharray="0" />
               <XAxis dataKey="name" tickFormatter={formatXAxisTick} {...commonAxisProps} angle={-45} textAnchor="end" height={60} interval="preserveStartEnd" />
               <YAxis {...commonAxisProps} tickFormatter={formatYAxisTick} />
-              <Tooltip cursor={{ fill: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)' }} content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} cursor={{ fill: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)' }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {refAreaLeft && refAreaRight ? (
                 <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill={primaryColor} fillOpacity={0.1} />
@@ -827,7 +863,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <CartesianGrid vertical={false} stroke={isDark ? '#1E293B' : '#F1F5F9'} strokeDasharray="0" />
               <XAxis dataKey="name" tickFormatter={formatXAxisTick} {...commonAxisProps} angle={-45} textAnchor="end" height={60} interval="preserveStartEnd" />
               <YAxis {...commonAxisProps} tickFormatter={formatYAxisTick} />
-              <Tooltip cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {refAreaLeft && refAreaRight ? (
                 <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill={primaryColor} fillOpacity={0.1} />
@@ -850,7 +886,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               <CartesianGrid vertical={false} stroke={isDark ? '#1E293B' : '#F1F5F9'} strokeDasharray="0" />
               <XAxis dataKey="name" tickFormatter={formatXAxisTick} {...commonAxisProps} angle={-45} textAnchor="end" height={60} interval="preserveStartEnd" />
               <YAxis {...commonAxisProps} tickFormatter={(tick: any) => `${(tick * 100).toFixed(0)}%`} />
-              <Tooltip cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} cursor={{ stroke: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)' }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
               {refAreaLeft && refAreaRight ? (
                 <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill={primaryColor} fillOpacity={0.1} />
@@ -864,7 +900,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
           <ResponsiveContainer width="100%" height="100%">
             <RadialBarChart cx="50%" cy="50%" innerRadius="20%" outerRadius="80%" barSize={12} data={pieData.map((d, i) => ({ ...d, fill: colors[i % colors.length] }))}>
               <RadialBar background={{ fill: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)' }} dataKey="_displayValue" animationDuration={1000} cornerRadius={10} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} content={<CustomTooltip />} />
               {config.showLegend && <Legend content={renderCustomLegend} />}
             </RadialBarChart>
           </ResponsiveContainer>
@@ -880,7 +916,7 @@ const Dashlet = ({ config, latestConfig, onRemove, onEdit, dragHandleProps, isOv
               animationDuration={1000}
               content={<CustomTreemapContent />}
             >
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip wrapperStyle={{ zIndex: 100 }} content={<CustomTooltip />} />
             </Treemap>
           </ResponsiveContainer>
         );
@@ -1062,44 +1098,134 @@ const SortableDashlet = ({ id, config, latestConfig, onRemove, onEdit }: { id: s
 };
 
 export default function CustomDashboard({ latestConfig }: CustomDashboardProps) {
-  const [dashlets, setDashlets] = useState<DashletConfig[]>(() => {
-    try {
-      const saved = localStorage.getItem('nw_custom_dashlets');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {
-      console.error("Failed to parse dashlets from local storage", e);
-    }
-    return [
-      {
-        id: 'default-1',
-        title: 'Top Services',
-        query: 'service exists',
-        fieldName: 'service',
-        timeRange: '1h',
-        size: 10000,
-        visualizationType: 'bar',
-        valueType: 'sessions',
-        sortOrder: 'order-descending'
-      },
-      {
-        id: 'default-2',
-        title: 'Top Source Countries',
-        query: 'country.src exists',
-        fieldName: 'country.src',
-        timeRange: '1h',
-        size: 10000,
-        visualizationType: 'pie',
-        valueType: 'sessions',
-        sortOrder: 'order-descending'
+  const [dashboards, setDashboards] = useState<DashboardConfig[]>([]);
+  const [activeDashboardId, setActiveDashboardId] = useState<string>('');
+  const [defaultDashboards, setDefaultDashboards] = useState<DashboardConfig[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    const loadDashboards = async () => {
+      try {
+        const response = await fetch('/api/dashboards');
+        let backendDashboards: DashboardConfig[] = [];
+        if (response.ok) {
+          backendDashboards = await response.json();
+          setDefaultDashboards(backendDashboards);
+        }
+
+        let localDashboards: DashboardConfig[] = [];
+        try {
+          const saved = localStorage.getItem('nw_custom_dashboards');
+          if (saved) localDashboards = JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse dashboards from local storage", e);
+        }
+        
+        // Migration from old dashlets
+        if (localDashboards.length === 0) {
+          try {
+            const savedDashlets = localStorage.getItem('nw_custom_dashlets');
+            if (savedDashlets) {
+              const parsedDashlets = JSON.parse(savedDashlets);
+              localDashboards = [
+                {
+                  id: 'migrated-dashboard',
+                  name: 'My Dashboard',
+                  dashlets: parsedDashlets,
+                  isDefault: false
+                }
+              ];
+            }
+          } catch (e) {
+            console.error("Failed to parse legacy dashlets", e);
+          }
+        }
+
+        // Merge backend dashboards with local ones
+        let mergedDashboards = localDashboards.filter(d => {
+          if (d.isDefault) {
+             return backendDashboards.some(b => b.id === d.id);
+          }
+          return true;
+        });
+        
+        for (const backendDash of backendDashboards) {
+          const existsLocal = mergedDashboards.find(d => d.id === backendDash.id);
+          if (!existsLocal) {
+            mergedDashboards.push(backendDash);
+          } else {
+            existsLocal.isDefault = true;
+          }
+        }
+        
+        if (mergedDashboards.length === 0 && backendDashboards.length > 0) {
+          mergedDashboards.push(...backendDashboards);
+        }
+
+        setDashboards(mergedDashboards);
+        
+        const savedActiveId = localStorage.getItem('nw_active_dashboard_id');
+        if (savedActiveId && mergedDashboards.find(d => d.id === savedActiveId)) {
+          setActiveDashboardId(savedActiveId);
+        } else if (mergedDashboards.length > 0) {
+          setActiveDashboardId(mergedDashboards[0].id);
+        }
+      } catch (error) {
+        console.error("Failed to load default dashboards", error);
+      } finally {
+        setIsLoaded(true);
       }
-    ];
-  });
+    };
+    
+    loadDashboards();
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded && dashboards.length > 0) {
+      localStorage.setItem('nw_custom_dashboards', JSON.stringify(dashboards));
+    }
+  }, [dashboards, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && activeDashboardId) {
+      localStorage.setItem('nw_active_dashboard_id', activeDashboardId);
+    }
+  }, [activeDashboardId, isLoaded]);
+
+  const activeDashboard = dashboards.find(d => d.id === activeDashboardId) || dashboards[0] || { id: '', name: '', dashlets: [] };
+  const dashlets = activeDashboard?.dashlets || [];
+
+  const setDashlets = (newDashlets: DashletConfig[] | ((prev: DashletConfig[]) => DashletConfig[])) => {
+    setDashboards(prevDashboards => prevDashboards.map(d => {
+      if (d.id === activeDashboardId) {
+        const updatedDashlets = typeof newDashlets === 'function' ? newDashlets(d.dashlets) : newDashlets;
+        return { ...d, dashlets: updatedDashlets };
+      }
+      return d;
+    }));
+  };
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [dashletToDelete, setDashletToDelete] = useState<string | null>(null);
   const [editingDashlet, setEditingDashlet] = useState<DashletConfig | null>(null);
+  
+  // Dashboard Management State
+  const [isDashboardDropdownOpen, setIsDashboardDropdownOpen] = useState(false);
+  const [isEditingDashboardName, setIsEditingDashboardName] = useState(false);
+  const [editingDashboardName, setEditingDashboardName] = useState('');
+  const dashboardDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dashboardDropdownRef.current && !dashboardDropdownRef.current.contains(event.target as Node)) {
+        setIsDashboardDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -1119,10 +1245,6 @@ export default function CustomDashboard({ latestConfig }: CustomDashboardProps) 
   const [refreshInterval, setRefreshInterval] = useState<number>(0);
   const [colorPalette, setColorPalette] = useState<string>('default');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    localStorage.setItem('nw_custom_dashlets', JSON.stringify(dashlets));
-  }, [dashlets]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -1282,9 +1404,9 @@ export default function CustomDashboard({ latestConfig }: CustomDashboardProps) 
   };
 
   const exportDashboard = () => {
-    const dataStr = JSON.stringify(dashlets, null, 2);
+    const dataStr = JSON.stringify(activeDashboard, null, 2);
     const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `dashboard-export-${new Date().toISOString().split('T')[0]}.json`;
+    const exportFileDefaultName = `${activeDashboard.name.toLowerCase().replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.json`;
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
@@ -1298,8 +1420,25 @@ export default function CustomDashboard({ latestConfig }: CustomDashboardProps) 
     reader.onload = (event) => {
       try {
         const imported = JSON.parse(event.target?.result as string);
-        if (Array.isArray(imported)) {
-          setDashlets(imported);
+        if (imported && typeof imported === 'object' && !Array.isArray(imported) && Array.isArray(imported.dashlets)) {
+          // It's a DashboardConfig object
+          const newDashboard: DashboardConfig = {
+            ...imported,
+            id: `dashboard-${Date.now()}`,
+            isDefault: false
+          };
+          setDashboards([...dashboards, newDashboard]);
+          setActiveDashboardId(newDashboard.id);
+        } else if (Array.isArray(imported)) {
+          // Legacy format (array of dashlets)
+          const newDashboard: DashboardConfig = {
+            id: `dashboard-${Date.now()}`,
+            name: `Imported Dashboard ${new Date().toLocaleTimeString()}`,
+            dashlets: imported,
+            isDefault: false
+          };
+          setDashboards([...dashboards, newDashboard]);
+          setActiveDashboardId(newDashboard.id);
         } else {
           alert("Invalid dashboard file format.");
         }
@@ -1311,6 +1450,47 @@ export default function CustomDashboard({ latestConfig }: CustomDashboardProps) 
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const createNewDashboard = () => {
+    const newDashboard: DashboardConfig = {
+      id: `dashboard-${Date.now()}`,
+      name: `New Dashboard`,
+      dashlets: [],
+      isDefault: false
+    };
+    setDashboards([...dashboards, newDashboard]);
+    setActiveDashboardId(newDashboard.id);
+    setIsDashboardDropdownOpen(false);
+  };
+
+  const deleteActiveDashboard = () => {
+    if (dashboards.length <= 1) {
+      alert("Cannot delete the last dashboard.");
+      return;
+    }
+    const newDashboards = dashboards.filter(d => d.id !== activeDashboardId);
+    setDashboards(newDashboards);
+    setActiveDashboardId(newDashboards[0].id);
+    setIsDashboardDropdownOpen(false);
+  };
+
+  const resetActiveDashboard = () => {
+    if (!activeDashboard.isDefault) return;
+    const defaultDash = defaultDashboards.find(d => d.id === activeDashboard.id);
+    if (defaultDash) {
+      setDashboards(dashboards.map(d => d.id === activeDashboard.id ? { ...defaultDash } : d));
+    }
+    setIsDashboardDropdownOpen(false);
+  };
+
+  const saveDashboardName = () => {
+    if (editingDashboardName.trim()) {
+      setDashboards(dashboards.map(d => 
+        d.id === activeDashboardId ? { ...d, name: editingDashboardName.trim() } : d
+      ));
+    }
+    setIsEditingDashboardName(false);
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 p-4 sm:p-8">
       <div className="max-w-7xl mx-auto">
@@ -1320,9 +1500,108 @@ export default function CustomDashboard({ latestConfig }: CustomDashboardProps) 
               <div className="p-2 bg-[#BE3B37]/10 rounded-xl">
                 <LayoutDashboard className="w-6 h-6 text-[#BE3B37]" />
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white tracking-tight">
-                Dashboard
-              </h2>
+              
+              {isEditingDashboardName ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={editingDashboardName}
+                    onChange={(e) => setEditingDashboardName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveDashboardName();
+                      if (e.key === 'Escape') setIsEditingDashboardName(false);
+                    }}
+                    className="text-2xl font-bold bg-white dark:bg-gray-800 border-2 border-[#BE3B37] rounded-lg px-2 py-1 focus:outline-none text-gray-900 dark:text-white"
+                    autoFocus
+                  />
+                  <button onClick={saveDashboardName} className="p-1.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50">
+                    <Check size={18} />
+                  </button>
+                  <button onClick={() => setIsEditingDashboardName(false)} className="p-1.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <X size={18} />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative" ref={dashboardDropdownRef}>
+                  <button 
+                    onClick={() => setIsDashboardDropdownOpen(!isDashboardDropdownOpen)}
+                    className="flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white tracking-tight hover:text-[#BE3B37] dark:hover:text-[#BE3B37] transition-colors group"
+                  >
+                    {activeDashboard.name}
+                    <ChevronDown className={`w-5 h-5 transition-transform ${isDashboardDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  <AnimatePresence>
+                    {isDashboardDropdownOpen && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-gray-200 dark:border-gray-800 z-50 overflow-hidden"
+                      >
+                        <div className="max-h-64 overflow-y-auto py-2">
+                          {dashboards.map(dashboard => (
+                            <button
+                              key={dashboard.id}
+                              onClick={() => {
+                                setActiveDashboardId(dashboard.id);
+                                setIsDashboardDropdownOpen(false);
+                              }}
+                              className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between ${
+                                activeDashboardId === dashboard.id 
+                                  ? 'bg-[#BE3B37]/10 text-[#BE3B37] font-medium' 
+                                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
+                              }`}
+                            >
+                              <span className="truncate pr-2">{dashboard.name}</span>
+                              {activeDashboardId === dashboard.id && <Check size={16} />}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="border-t border-gray-200 dark:border-gray-800 p-2 grid grid-cols-2 gap-1">
+                          <button
+                            onClick={createNewDashboard}
+                            className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                          >
+                            <Plus size={14} />
+                            New
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingDashboardName(activeDashboard.name);
+                              setIsEditingDashboardName(true);
+                              setIsDashboardDropdownOpen(false);
+                            }}
+                            className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                          >
+                            <Edit2 size={14} />
+                            Rename
+                          </button>
+                          {activeDashboard.isDefault && (
+                            <button
+                              onClick={resetActiveDashboard}
+                              className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors col-span-2"
+                            >
+                              <RotateCcw size={14} />
+                              Reset Default Dashboard
+                            </button>
+                          )}
+                          {!activeDashboard.isDefault && dashboards.length > 1 && (
+                            <button
+                              onClick={deleteActiveDashboard}
+                              className="flex items-center justify-center gap-1.5 px-2 py-2 text-xs font-medium text-red-600 dark:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors col-span-2"
+                            >
+                              <Trash2 size={14} />
+                              Delete Dashboard
+                            </button>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
             <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-widest ml-11">
               Custom Visual Intelligence
@@ -1506,6 +1785,7 @@ export default function CustomDashboard({ latestConfig }: CustomDashboardProps) 
                     <option value="5m">Last 5 Minutes</option>
                     <option value="15m">Last 15 Minutes</option>
                     <option value="1h">Last 1 Hour</option>
+                    <option value="3h">Last 3 Hours</option>
                     <option value="6h">Last 6 Hours</option>
                     <option value="24h">Last 24 Hours</option>
                     <option value="72h">Last 3 Days</option>

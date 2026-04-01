@@ -299,28 +299,33 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
     
     const categorize = (svcName: string, vol: number) => {
       const name = svcName.toLowerCase();
-      if (name.includes('80') || name.includes('443')) web += vol;
-      else if (name.includes('1433') || name.includes('1434') || name.includes('3700') || name.includes('7001') || name.includes('1521')) db += vol;
-      else if (name.includes('25') || name.includes('110') || name.includes('143')) mail += vol;
-      else if (name.includes('21') || name.includes('69') || name.includes('139') || name.includes('2049') || name.includes('873')) files += vol;
-      else if (name.includes('22') || name.includes('23') || name.includes('3389') || name.includes('5900')) racc += vol;
-      else if (name.includes('53') || name.includes('67') || name.includes('123') || name.includes('161') || name.includes('179')) infra += vol;
-      else if (name.includes('389') || name.includes('88') || name.includes('1812') || name.includes('1813')) idauth += vol;
+      const port = name.split('/')[0];
+      
+      const isPort = (p: string) => port === p;
+      const hasName = (n: string) => name.includes(n);
+
+      if (isPort('80') || isPort('443') || hasName('http') || hasName('ssl')) web += vol;
+      else if (['1433', '1434', '3700', '7001', '1521'].some(isPort) || hasName('sql') || hasName('oracle') || hasName('db2')) db += vol;
+      else if (['25', '110', '143', '465', '587', '993', '995'].some(isPort) || hasName('mail') || hasName('smtp') || hasName('pop3') || hasName('imap')) mail += vol;
+      else if (['21', '69', '139', '445', '2049', '873'].some(isPort) || hasName('ftp') || hasName('smb') || hasName('nfs')) files += vol;
+      else if (['22', '23', '3389', '5900', '5938'].some(isPort) || hasName('ssh') || hasName('telnet') || hasName('rdp') || hasName('vnc')) racc += vol;
+      else if (['53', '67', '68', '123', '161', '162', '179', '500', '520'].some(isPort) || hasName('dns') || hasName('dhcp') || hasName('ntp') || hasName('snmp')) infra += vol;
+      else if (['389', '636', '88', '1812', '1813'].some(isPort) || hasName('ldap') || hasName('kerberos') || hasName('radius')) idauth += vol;
     };
 
     selectedAsset.serverServices.forEach(s => categorize(s.name, s.volume));
     selectedAsset.clientServices.forEach(s => categorize(s.name, s.volume));
 
-    const maxVal = Math.max(web, db, mail, infra, files, racc, idauth, 1);
+    const total = web + db + mail + infra + files + racc + idauth || 1;
     
     return [
-      { subject: 'Web', value: (web / maxVal) * 100 },
-      { subject: 'File Sharing', value: (files / maxVal) * 100 },
-      { subject: 'Remote Access', value: (racc / maxVal) * 100 },
-      { subject: 'Database', value: (db / maxVal) * 100 },
-      { subject: 'Mail', value: (mail / maxVal) * 100 },
-      { subject: 'Infra', value: (infra / maxVal) * 100 },
-      { subject: 'Auth', value: (idauth / maxVal) * 100 }      
+      { subject: 'Web', value: (web / total) * 100 },
+      { subject: 'File Sharing', value: (files / total) * 100 },
+      { subject: 'Remote Access', value: (racc / total) * 100 },
+      { subject: 'Database', value: (db / total) * 100 },
+      { subject: 'Mail', value: (mail / total) * 100 },
+      { subject: 'Infra', value: (infra / total) * 100 },
+      { subject: 'Auth', value: (idauth / total) * 100 }      
     ];
   }, [selectedAsset]);
 
@@ -331,8 +336,12 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
     
     const categorize = (svcName: string, vol: number, sessions: number) => {
       const name = svcName.toLowerCase();
-      const isRemoteAccess = ['3389', '22', '5900', '5600', 'rdp', 'ssh', 'vnc'].some(p => name.includes(p));
-      const isFileShare = ['139', '445', '21', '2049', '69', 'smb', 'ftp', 'nfs'].some(p => name.includes(p));
+      const port = name.split('/')[0];
+      
+      const isRemoteAccess = ['3389', '22', '23', '5900', '5938', '5600'].includes(port) || 
+                             ['rdp', 'ssh', 'vnc'].some(p => name.includes(p));
+      const isFileShare = ['139', '445', '21', '2049', '69', '873'].includes(port) || 
+                          ['smb', 'ftp', 'nfs'].some(p => name.includes(p));
 
       if (isRemoteAccess) remoteSessions += (sessions || 1);
       if (isFileShare) fileShareVolume += vol;
@@ -565,10 +574,24 @@ export default function AssetsView({ data, isDark }: AssetsViewProps) {
                           option={{
                             tooltip: {
                               trigger: 'item',
+                              confine: true,
                               backgroundColor: isDark ? '#111827' : '#ffffff',
                               borderColor: isDark ? '#374151' : '#e5e7eb',
                               textStyle: { color: isDark ? '#d1d5db' : '#374151' },
-                              formatter: (params: any) => `${params.name}: ${Math.round(Number(params.value))}%`
+                              formatter: (params: any) => {
+                                const values = params.value as number[];
+                                return `
+                                  <div class="p-2 min-w-[150px]">
+                                    <div class="font-bold mb-2 border-b border-gray-200 dark:border-gray-700 pb-1 text-sm">${params.name}</div>
+                                    ${radarData.map((d, i) => `
+                                      <div class="flex justify-between gap-4 text-[11px] py-0.5">
+                                        <span class="text-gray-500 dark:text-gray-400">${d.subject}:</span>
+                                        <span class="font-mono font-bold text-blue-600 dark:text-blue-400">${values[i].toFixed(1)}%</span>
+                                      </div>
+                                    `).join('')}
+                                  </div>
+                                `;
+                              }
                             },
                             radar: {
                               indicator: radarData.map(d => ({ name: d.subject, max: 100 })),

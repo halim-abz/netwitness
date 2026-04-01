@@ -198,7 +198,7 @@ export default function Sidebar({ onQuery, onAlertsQuery, isLoading, onCancel, o
   const [alertsPassword, setAlertsPassword] = useState(""); // Password is only kept in memory for security
 
   const [query, setQuery] = useState(() => params.get('query') || "");
-  const [size, setSize] = useState(() => params.get('size') ? Number(params.get('size')) : 10000);
+  const [size, setSize] = useState(() => params.get('size') ? Number(params.get('size')) : 100000);
   const [timeRange, setTimeRange] = useState(() => params.get('timerange') || "5m");
   const [customMetakeys, setCustomMetakeys] = useState("");
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(getInitialSelectedKeys());
@@ -314,7 +314,7 @@ export default function Sidebar({ onQuery, onAlertsQuery, isLoading, onCancel, o
   // Form Submission
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (viewMode === 'alerts') {
+    if (viewMode === 'alerts-incidents') {
       storage.set('local', 'nw_alerts_host', alertsHost);
       storage.set('local', 'nw_alerts_port', alertsPort);
       storage.set('local', 'nw_alerts_username', alertsUsername);
@@ -347,30 +347,30 @@ export default function Sidebar({ onQuery, onAlertsQuery, isLoading, onCancel, o
       <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           
-          <AccordionSection title={viewMode === 'alerts' ? "Alerts Connection" : "Connection"} icon={Server} isOpen={sections.connection} onToggle={() => toggleSection('connection')}>
+          <AccordionSection title={(viewMode === 'alerts-incidents') ? "Alerts/Incidents Connection" : "Connection"} icon={Server} isOpen={sections.connection} onToggle={() => toggleSection('connection')}>
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-2 space-y-1">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Host / IP</label>
-                <input type="text" value={viewMode === 'alerts' ? alertsHost : host} onChange={(e) => viewMode === 'alerts' ? setAlertsHost(e.target.value) : setHost(e.target.value)} placeholder={viewMode === 'alerts' ? import.meta.env.VITE_NW_ALERTS_HOST || import.meta.env.VITE_NW_HOST : import.meta.env.VITE_NW_HOST} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
+                <input type="text" value={(viewMode === 'alerts-incidents') ? alertsHost : host} onChange={(e) => (viewMode === 'alerts-incidents') ? setAlertsHost(e.target.value) : setHost(e.target.value)} placeholder={(viewMode === 'alerts-incidents') ? import.meta.env.VITE_NW_ALERTS_HOST || import.meta.env.VITE_NW_HOST : import.meta.env.VITE_NW_HOST} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Port</label>
-                <input type="text" value={viewMode === 'alerts' ? alertsPort : port} onChange={(e) => viewMode === 'alerts' ? setAlertsPort(e.target.value) : setPort(e.target.value)} placeholder={viewMode === 'alerts' ? import.meta.env.VITE_NW_ALERTS_PORT || import.meta.env.VITE_NW_PORT : import.meta.env.VITE_NW_PORT} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
+                <input type="text" value={(viewMode === 'alerts-incidents') ? alertsPort : port} onChange={(e) => (viewMode === 'alerts-incidents') ? setAlertsPort(e.target.value) : setPort(e.target.value)} placeholder={(viewMode === 'alerts-incidents') ? import.meta.env.VITE_NW_ALERTS_PORT || import.meta.env.VITE_NW_PORT : import.meta.env.VITE_NW_PORT} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Username</label>
-                <input type="text" value={viewMode === 'alerts' ? alertsUsername : username} onChange={(e) => viewMode === 'alerts' ? setAlertsUsername(e.target.value) : setUsername(e.target.value)} placeholder={viewMode === 'alerts' ? import.meta.env.VITE_NW_ALERTS_USERNAME || import.meta.env.VITE_NW_USERNAME : import.meta.env.VITE_NW_USERNAME} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
+                <input type="text" value={(viewMode === 'alerts-incidents') ? alertsUsername : username} onChange={(e) => (viewMode === 'alerts-incidents') ? setAlertsUsername(e.target.value) : setUsername(e.target.value)} placeholder={(viewMode === 'alerts-incidents') ? import.meta.env.VITE_NW_ALERTS_USERNAME || import.meta.env.VITE_NW_USERNAME : import.meta.env.VITE_NW_USERNAME} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-gray-500 dark:text-gray-400">Password</label>
-                <input type="password" value={viewMode === 'alerts' ? alertsPassword : password} onChange={(e) => viewMode === 'alerts' ? setAlertsPassword(e.target.value) : setPassword(e.target.value)} placeholder={viewMode === 'alerts' ? (import.meta.env.VITE_NW_ALERTS_PASSWORD || import.meta.env.VITE_NW_PASSWORD ? "••••••••" : "") : (import.meta.env.VITE_NW_PASSWORD ? "••••••••" : "")} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
+                <input type="password" value={(viewMode === 'alerts-incidents') ? alertsPassword : password} onChange={(e) => (viewMode === 'alerts-incidents') ? setAlertsPassword(e.target.value) : setPassword(e.target.value)} placeholder={(viewMode === 'alerts-incidents') ? (import.meta.env.VITE_NW_ALERTS_PASSWORD || import.meta.env.VITE_NW_PASSWORD ? "••••••••" : "") : (import.meta.env.VITE_NW_PASSWORD ? "••••••••" : "")} className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-950 border border-gray-200 dark:border-gray-800 rounded-md text-sm text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#BE3B37] transition-colors" />
               </div>
             </div>
           </AccordionSection>
 
-          {viewMode !== 'alerts' && (
+          {viewMode !== 'alerts-incidents' && (
             <>
               <AccordionSection title="Query Parameters" icon={Filter} isOpen={sections.query} onToggle={() => toggleSection('query')}>
             <div className="space-y-1">
