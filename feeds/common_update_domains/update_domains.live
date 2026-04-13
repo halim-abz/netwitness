@@ -1,0 +1,8 @@
+ResourceType=feed
+FileName=update_domains
+Title=Common Update Domains
+Medium=log,packet
+Tags=
+Description=List of common domains for software updates
+Dependencies=
+Discontinued=false

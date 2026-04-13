@@ -1,66 +1,143 @@
 #!/usr/bin/env python3
 """
-NetWitness MCP Server - Queries metadata from a NetWitness Concentrator or Broker and Alerts data from the Admin Server API.
+NetWitness MCP Server
+=====================
+Queries metadata from a NetWitness Concentrator/Broker and Incidents/Alerts data
+from the Admin Server API. All tool outputs are returned as structured JSON.
+
+Response envelope (every tool):
+{
+  "status":   "success" | "error",
+  "tool":     "<tool_name>",
+  "query":    { ...echoed inputs... },
+  "data":     { ...tool-specific payload... } | null,
+  "metadata": { ...counts, timing, pagination... },
+  "error":    null | { "code": "...", "message": "..." }
+}
 """
 import os
 import sys
+import json
 import logging
 from datetime import datetime, timezone, timedelta
+from typing import Any, Optional
+
 import httpx
 from mcp.server.fastmcp import FastMCP
 from urllib.parse import quote_plus
 
-# Configure logging to stderr
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    stream=sys.stderr
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    stream=sys.stderr,
 )
 logger = logging.getLogger("netwitness-mcp-server")
 
-# Initialize MCP server
+# ---------------------------------------------------------------------------
+# MCP server
+# ---------------------------------------------------------------------------
 mcp = FastMCP("netwitness")
 
+# ---------------------------------------------------------------------------
 # Configuration
-API_URL = os.environ.get("NETWITNESS_API_URL", "")
-API_USERNAME = os.environ.get("NETWITNESS_USERNAME", "")
-API_PASSWORD = os.environ.get("NETWITNESS_PASSWORD", "")
-NW_ADMIN_URL = os.environ.get("NW_ADMIN_URL", "")
+# ---------------------------------------------------------------------------
+API_URL          = os.environ.get("NETWITNESS_API_URL", "")
+API_USERNAME     = os.environ.get("NETWITNESS_USERNAME", "")
+API_PASSWORD     = os.environ.get("NETWITNESS_PASSWORD", "")
+NW_ADMIN_URL     = os.environ.get("NW_ADMIN_URL", "")
 NW_ADMIN_USERNAME = os.environ.get("NW_ADMIN_USERNAME", "")
 NW_ADMIN_PASSWORD = os.environ.get("NW_ADMIN_PASSWORD", "")
 
-# === HELPER FUNCTIONS ===
-def calculate_start_time(time_range: str) -> tuple[str, str]:
-    """Converts NetWitness-style time_range (e.g., '2d', '1h', '30m') to ISO 8601 start/end times required by the Alert API."""
-    now_utc = datetime.now(timezone.utc)
-    # The API requires ISO 8601 format: YYYY-MM-DDTHH:MM:SS.SSSZ [cite: 365, 366]
-    end_time = now_utc.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
-    
-    duration_map = {'m': 'minutes', 'h': 'hours', 'd': 'days'}
-    
+DEFAULT_HTTP_TIMEOUT = 30.0
+TOKEN_TTL_SECONDS    = 600  # cache JWT for 10 minutes
+
+# ---------------------------------------------------------------------------
+# Response helpers - guarantee a single, consistent JSON envelope
+# ---------------------------------------------------------------------------
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _envelope(
+    status: str,
+    tool: str,
+    query: Optional[dict] = None,
+    data: Any = None,
+    metadata: Optional[dict] = None,
+    error: Optional[dict] = None,
+) -> str:
+    """Serialize a standard response envelope to a JSON string."""
+    payload = {
+        "status":   status,
+        "tool":     tool,
+        "query":    query or {},
+        "data":     data,
+        "metadata": metadata or {},
+        "error":    error,
+    }
+    return json.dumps(payload, indent=2, default=str, ensure_ascii=False)
+
+
+def _success(tool: str, data: Any, query: Optional[dict] = None,
+             metadata: Optional[dict] = None) -> str:
+    md = {"generated_at": _now_iso()}
+    if metadata:
+        md.update(metadata)
+    return _envelope("success", tool, query=query, data=data, metadata=md)
+
+
+def _error(tool: str, code: str, message: str, query: Optional[dict] = None,
+           metadata: Optional[dict] = None) -> str:
+    logger.error("Tool %s error [%s]: %s", tool, code, message)
+    md = {"generated_at": _now_iso()}
+    if metadata:
+        md.update(metadata)
+    return _envelope(
+        "error", tool,
+        query=query, data=None, metadata=md,
+        error={"code": code, "message": message},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Time helpers
+# ---------------------------------------------------------------------------
+_VALID_UNITS = {"m": "minutes", "h": "hours", "d": "days"}
+
+
+def parse_time_range(time_range: str) -> tuple[int, str]:
+    """Parse strings like '30m', '1h', '2d' into (value, unit). Raises ValueError on bad input."""
+    if not time_range or len(time_range) < 2:
+        raise ValueError(f"time_range must look like '30m', '1h', '2d'; got {time_range!r}")
+    unit = time_range[-1].lower()
+    if unit not in _VALID_UNITS:
+        raise ValueError(f"time_range unit must be one of m/h/d; got {unit!r}")
     try:
-        unit = time_range[-1].lower()
         value = int(time_range[:-1])
-    except:
-        unit = 'h'
-        value = 1 # Default to 1 hour
-    
-    kwargs = {}
-    if unit in duration_map:
-        kwargs[duration_map[unit]] = value
-    else:
-        kwargs['hours'] = 1
+    except ValueError as exc:
+        raise ValueError(f"time_range value must be an integer; got {time_range[:-1]!r}") from exc
+    if value <= 0:
+        raise ValueError(f"time_range value must be positive; got {value}")
+    return value, unit
 
-    start_time_dt = now_utc - timedelta(**kwargs)
-    start_time = start_time_dt.replace(microsecond=0).isoformat().replace('+00:00', 'Z')
-    
-    return start_time, end_time
 
-# === RESOURCES ===
-@mcp.resource("netwitness://meta-keys")
-def get_meta_keys() -> str:
-    """NetWitness available meta keys and their descriptions."""
-    return """# NetWitness Meta Keys Reference
+def calculate_start_time(time_range: str) -> tuple[str, str]:
+    """Convert a NetWitness-style range (e.g. '2d', '1h', '30m') to ISO 8601 (start, end)."""
+    value, unit = parse_time_range(time_range)
+    now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+    delta = timedelta(**{_VALID_UNITS[unit]: value})
+    start_dt = now_utc - delta
+    fmt = lambda d: d.isoformat().replace("+00:00", "Z")
+    return fmt(start_dt), fmt(now_utc)
+
+
+# ---------------------------------------------------------------------------
+# Documentation constants (verbatim from upstream reference)
+# ---------------------------------------------------------------------------
+META_KEYS_DOC = """# NetWitness Meta Keys Reference
 
 ## Network
 - ip.src, ip.dst: Source/destination IP addresses
@@ -536,13 +613,9 @@ This section includes the meta keys that specifically apply to TNS traffic.
 - database - Service Name
 - host.src - client host
 - service - 1521
-- user - client username
-"""
+- user - client username"""
 
-@mcp.resource("netwitness://query-syntax")
-def get_query_syntax() -> str:
-    """NetWitness query syntax guide."""
-    return """# NetWitness Query Syntax Guide
+QUERY_SYNTAX_DOC = """# NetWitness Query Syntax Guide
 
 ## WHERE Clause Operators
 - **Equality**: direction='outbound'
@@ -609,364 +682,853 @@ def get_query_syntax() -> str:
 2. Use CIDR notation for IP ranges
 3. Combine related conditions with &&
 4. Use exists to find sessions with specific meta keys populated
-5. Range queries are efficient for numeric values
-"""
+5. Range queries are efficient for numeric values"""
 
-# === REQUIRED FOR GEMINI CLI ===
+
+# ---------------------------------------------------------------------------
+# Resources (raw markdown - resources are documentation, not tool output)
+# ---------------------------------------------------------------------------
+@mcp.resource("netwitness://meta-keys")
+def get_meta_keys() -> str:
+    """NetWitness available meta keys and their descriptions."""
+    return META_KEYS_DOC
+
+
+@mcp.resource("netwitness://query-syntax")
+def get_query_syntax() -> str:
+    """NetWitness query syntax guide."""
+    return QUERY_SYNTAX_DOC
+
+
+# ---------------------------------------------------------------------------
+# Documentation tools (Gemini CLI compatibility) - JSON envelope
+# ---------------------------------------------------------------------------
 @mcp.tool(annotations={"readOnlyHint": True})
 async def get_netwitness_meta_keys() -> str:
-    """Retrieves the complete list of available NetWitness meta keys and their descriptions for use in query_sessions and query_metakey_values. Use this tool *before* constructing any query to understand the available fields."""
-    return get_meta_keys()
+    """Returns the complete list of available NetWitness meta keys and their descriptions for use in query_sessions and query_metakey_values. Call this *before* constructing any query."""
+    return _success(
+        tool="get_netwitness_meta_keys",
+        data={"format": "markdown", "content": META_KEYS_DOC},
+        metadata={"length_chars": len(META_KEYS_DOC)},
+    )
+
 
 @mcp.tool(annotations={"readOnlyHint": True})
 async def get_netwitness_query_syntax() -> str:
-    """Retrieves the NetWitness query syntax guide, including operators, clauses (WHERE, SELECT), time ranges, and example queries. Use this tool *before* constructing any query to ensure correct syntax."""
-    return get_query_syntax()
+    """Returns the NetWitness query syntax guide (operators, WHERE/SELECT clauses, time ranges, examples). Call this *before* constructing any query."""
+    return _success(
+        tool="get_netwitness_query_syntax",
+        data={"format": "markdown", "content": QUERY_SYNTAX_DOC},
+        metadata={"length_chars": len(QUERY_SYNTAX_DOC)},
+    )
 
-# === MCP TOOLS ===
-@mcp.tool(annotations={"readOnlyHint": True,"sensitiveHint": "High"})
+
+# ---------------------------------------------------------------------------
+# query_sessions
+# ---------------------------------------------------------------------------
+@mcp.tool(annotations={"readOnlyHint": True, "sensitiveHint": "High"})
 async def query_sessions(
-    where_clause: str = "", 
+    where_clause: str = "",
     select_clause: str = "",
     time_range: str = "1h",
-    max_results: int = 1000
+    max_results: int = 1000,
 ) -> str:
-    """Queries NetWitness sessions using SQL-like WHERE clause syntax. IMPORTANT: Check resources netwitness://meta-keys for available fields and netwitness://query-syntax for syntax examples before building queries. Time range examples: 30m, 1h, 24h. Returns detailed session records."""
+    """Queries NetWitness sessions using SQL-like WHERE clause syntax. IMPORTANT: Check resources netwitness://meta-keys for available fields and netwitness://query-syntax for syntax examples before building queries. Time range examples: 30m, 1h, 24h. Returns structured session records grouped by sessionid."""
+    tool = "query_sessions"
+    query_echo = {
+        "where_clause": where_clause,
+        "select_clause": select_clause or "*",
+        "time_range": time_range,
+        "max_results": max_results,
+    }
+    logger.info("Executing %s: %s", tool, query_echo)
 
-    logger.info(f"Executing query_sessions: select='{select_clause}', where='{where_clause}', time={time_range}, limit={max_results}")
-
+    # ---- validation ----
     if not API_URL.strip():
-        return "❌ Error: NETWITNESS_API_URL is not configured."
+        return _error(tool, "config_error", "NETWITNESS_API_URL is not configured.", query_echo)
     if not API_USERNAME.strip() or not API_PASSWORD.strip():
-        return "❌ Error: NETWITNESS_USERNAME or NETWITNESS_PASSWORD are not configured."
+        return _error(tool, "config_error", "NETWITNESS_USERNAME or NETWITNESS_PASSWORD are not configured.", query_echo)
+    try:
+        parse_time_range(time_range)
+    except ValueError as e:
+        return _error(tool, "validation_error", str(e), query_echo)
+    if max_results <= 0:
+        return _error(tool, "validation_error", "max_results must be positive.", query_echo)
 
-    # Build query string
-    if not select_clause.strip():
-        select_clause = "*"
-    
-    select_part = f"select {select_clause}"
+    # ---- build query ----
+    select_clause_eff = select_clause.strip() or "*"
+    select_part = f"select {select_clause_eff}"
     time_part = f"time=rtp(now,{time_range})-u"
-    
     if where_clause.strip():
         where_part = f"where {where_clause.strip()} && {time_part}"
     else:
         where_part = f"where {time_part}"
-    
     query_str = f"{select_part} {where_part}"
-    
-    encoded_query = quote_plus(query_str)
-    url = f"{API_URL}/sdk?msg=query&force-content-type=application/json&size={max_results}&query={encoded_query}"
 
+    encoded_query = quote_plus(query_str)
+    url = (
+        f"{API_URL}/sdk?msg=query"
+        f"&force-content-type=application/json"
+        f"&size={max_results}"
+        f"&query={encoded_query}"
+    )
+
+    # ---- execute ----
     try:
         async with httpx.AsyncClient(auth=(API_USERNAME, API_PASSWORD), verify=False) as client:
-            response = await client.get(url, timeout=30)
+            response = await client.get(url, timeout=DEFAULT_HTTP_TIMEOUT)
             response.raise_for_status()
             data = response.json()
-
-            results = data.get('results', {}).get('fields', [])
-            
-            if not results:
-                return f"No results found for the given query in the last {time_range}."
-            
-            formatted_output = f"**NetWitness Query Results** (Last {time_range})\n\n"
-            
-            if where_clause.strip():
-                formatted_output += f"*Filter: {where_clause}*\n\n"
-            
-            lines = []
-            current_group = None
-            
-            for item in results:
-                field_type = item.get('type', 'N/A')
-                field_value = item.get('value', 'N/A')
-                group_id = item.get('group', 'N/A')
-
-                if group_id != current_group:
-                    if current_group is not None:
-                        lines.append("---")
-                    lines.append(f"**Session ID**: {group_id}")
-                    current_group = group_id
-                
-                lines.append(f"- **{field_type}**: {field_value}")
-            
-            formatted_output += "\n".join(lines)
-            formatted_output += f"\n\n**Total Sessions**: {len(set(item.get('group') for item in results if item.get('group')))}"
-            
-            return formatted_output.strip()
-    
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error during NetWitness query: {e.response.status_code} - {e.response.text}")
-        return f"❌ NetWitness API Error: {e.response.status_code} - {e.response.text}"
+        return _error(
+            tool, "http_error",
+            f"NetWitness API returned HTTP {e.response.status_code}: {e.response.text[:500]}",
+            query_echo,
+            metadata={"http_status": e.response.status_code},
+        )
     except httpx.RequestError as e:
-        logger.error(f"Request error during NetWitness query: {e}")
-        return f"❌ Request Error: Unable to connect to NetWitness API. {str(e)}"
+        return _error(tool, "request_error", f"Unable to connect to NetWitness API: {e}", query_echo)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
-        return f"❌ An unexpected error occurred: {str(e)}"
+        logger.exception("Unexpected error in %s", tool)
+        return _error(tool, "unexpected_error", str(e), query_echo)
+
+    # ---- parse: group fields by sessionid ----
+    fields = data.get("results", {}).get("fields", []) or []
+    sessions: dict[Any, dict[str, Any]] = {}
+    session_order: list[Any] = []
+
+    for item in fields:
+        group_id = item.get("group")
+        if group_id is None:
+            continue
+        if group_id not in sessions:
+            sessions[group_id] = {"session_id": group_id, "fields": {}}
+            session_order.append(group_id)
+        field_type = item.get("type", "unknown")
+        field_value = item.get("value")
+        bucket = sessions[group_id]["fields"]
+        # Multiple values for the same meta key -> coerce to a list
+        if field_type in bucket:
+            existing = bucket[field_type]
+            if isinstance(existing, list):
+                existing.append(field_value)
+            else:
+                bucket[field_type] = [existing, field_value]
+        else:
+            bucket[field_type] = field_value
+
+    sessions_list = [sessions[g] for g in session_order]
+
+    if not sessions_list:
+        return _success(
+            tool=tool,
+            data={"sessions": []},
+            query=query_echo,
+            metadata={"session_count": 0, "field_count": 0, "constructed_query": query_str},
+        )
+
+    return _success(
+        tool=tool,
+        data={"sessions": sessions_list},
+        query=query_echo,
+        metadata={
+            "session_count": len(sessions_list),
+            "field_count": len(fields),
+            "constructed_query": query_str,
+        },
+    )
 
 
-@mcp.tool(annotations={"readOnlyHint": True,"sensitiveHint": "High"})
+# ---------------------------------------------------------------------------
+# query_metakey_values
+# ---------------------------------------------------------------------------
+@mcp.tool(annotations={"readOnlyHint": True, "sensitiveHint": "High"})
 async def query_metakey_values(
     meta_key: str,
     where_clause: str = "",
     time_range: str = "1h",
     limit: int = 100,
-    sort_order: str = "descending"
+    sort_order: str = "descending",
 ) -> str:
-    """Gets aggregated values for a specific NetWitness meta key with counts (top-N query). Use where_clause to filter results (e.g., 'service=443' to see IPs only on HTTPS). Check resources netwitness://meta-keys for available fields and netwitness://query-syntax for syntax examples before building queries to be used in the where_clause. Time range examples: 30m, 1h, 24h. sort_order can be 'descending' (default, most common first) or 'ascending' (least common first). Returns top values by frequency with occurrence counts."""
-    
-    logger.info(f"Executing query_metakey_values: meta_key='{meta_key}', where='{where_clause}', time={time_range}, limit={limit}, sort={sort_order}")
-
-    if not API_URL.strip():
-        return "❌ Error: NETWITNESS_API_URL is not configured."
-    if not API_USERNAME.strip() or not API_PASSWORD.strip():
-        return "❌ Error: NETWITNESS_USERNAME or NETWITNESS_PASSWORD are not configured."
-
-    # Validate and set sort order
-    if sort_order.lower() not in ["descending", "ascending"]:
-        return f"❌ Error: sort_order must be 'descending' or 'ascending', got '{sort_order}'"
-    
-    order_flag = f"order-{sort_order.lower()}"
-
-    # Build the query parameters
-    params = {
-        'msg': 'values',
-        'force-content-type': 'application/json',
-        'size': str(limit),
-        'fieldName': meta_key,
-        'flags': f'sessions,sort-total,{order_flag}'
+    """Gets aggregated values for a specific NetWitness meta key with counts (top-N query). Use where_clause to filter results (e.g., 'service=443'). Check resources netwitness://meta-keys and netwitness://query-syntax before building queries. sort_order: 'descending' (default) or 'ascending'."""
+    tool = "query_metakey_values"
+    query_echo = {
+        "meta_key": meta_key,
+        "where_clause": where_clause,
+        "time_range": time_range,
+        "limit": limit,
+        "sort_order": sort_order,
     }
-    
-    # Add time range filter
+    logger.info("Executing %s: %s", tool, query_echo)
+
+    # ---- validation ----
+    if not API_URL.strip():
+        return _error(tool, "config_error", "NETWITNESS_API_URL is not configured.", query_echo)
+    if not API_USERNAME.strip() or not API_PASSWORD.strip():
+        return _error(tool, "config_error", "NETWITNESS_USERNAME or NETWITNESS_PASSWORD are not configured.", query_echo)
+    if not meta_key or not meta_key.strip():
+        return _error(tool, "validation_error", "meta_key is required.", query_echo)
+    if sort_order.lower() not in ("descending", "ascending"):
+        return _error(tool, "validation_error", f"sort_order must be 'descending' or 'ascending'; got {sort_order!r}", query_echo)
+    try:
+        parse_time_range(time_range)
+    except ValueError as e:
+        return _error(tool, "validation_error", str(e), query_echo)
+    if limit <= 0:
+        return _error(tool, "validation_error", "limit must be positive.", query_echo)
+
+    order_flag = f"order-{sort_order.lower()}"
     time_filter = f"time=rtp(now,{time_range})-u"
-    
-    if where_clause.strip():
-        full_filter = f"{where_clause.strip()} && {time_filter}"
-    else:
-        full_filter = time_filter
-    
-    params['where'] = full_filter
-    
-    # Build URL with query parameters
-    param_str = "&".join([f"{k}={quote_plus(v)}" for k, v in params.items()])
+    full_filter = f"{where_clause.strip()} && {time_filter}" if where_clause.strip() else time_filter
+
+    params = {
+        "msg": "values",
+        "force-content-type": "application/json",
+        "size": str(limit),
+        "fieldName": meta_key,
+        "flags": f"sessions,sort-total,{order_flag}",
+        "where": full_filter,
+    }
+    param_str = "&".join(f"{k}={quote_plus(v)}" for k, v in params.items())
     url = f"{API_URL}/sdk?{param_str}"
-    
+
     try:
         async with httpx.AsyncClient(auth=(API_USERNAME, API_PASSWORD), verify=False) as client:
-            response = await client.get(url, timeout=30)
+            response = await client.get(url, timeout=DEFAULT_HTTP_TIMEOUT)
             response.raise_for_status()
             data = response.json()
-            
-            # Parse the values response
-            results = data.get('results', {}).get('fields', [])
-            
-            if not results:
-                return f"No values found for meta key '{meta_key}' with the given filters in the last {time_range}."
-            
-            # Format the output
-            formatted_output = f"**Top {limit} '{meta_key}' Values** (Last {time_range})\n\n"
-            
-            if where_clause.strip():
-                formatted_output += f"*Filter: {where_clause}*\n\n"
-            
-            formatted_output += "| Value | Count |\n"
-            formatted_output += "|-------|-------|\n"
-            
-            for item in results:
-                value = item.get('value', 'N/A')
-                count = item.get('count', 0)
-                formatted_output += f"| {value} | {count:,} |\n"
-            
-            total_count = sum(item.get('count', 0) for item in results)
-            formatted_output += f"\n**Total Events**: {total_count:,}"
-            formatted_output += f"\n**Unique Values Shown**: {len(results)}"
-            
-            return formatted_output.strip()
-    
     except httpx.HTTPStatusError as e:
-        logger.error(f"HTTP error during NetWitness values query: {e.response.status_code} - {e.response.text}")
-        return f"❌ NetWitness API Error: {e.response.status_code} - {e.response.text}"
+        return _error(
+            tool, "http_error",
+            f"NetWitness API returned HTTP {e.response.status_code}: {e.response.text[:500]}",
+            query_echo,
+            metadata={"http_status": e.response.status_code},
+        )
     except httpx.RequestError as e:
-        logger.error(f"Request error during NetWitness values query: {e}")
-        return f"❌ Request Error: Unable to connect to NetWitness API. {str(e)}"
+        return _error(tool, "request_error", f"Unable to connect to NetWitness API: {e}", query_echo)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
-        return f"❌ An unexpected error occurred: {str(e)}"
+        logger.exception("Unexpected error in %s", tool)
+        return _error(tool, "unexpected_error", str(e), query_echo)
+
+    fields = data.get("results", {}).get("fields", []) or []
+    values = [
+        {"value": item.get("value"), "count": item.get("count", 0)}
+        for item in fields
+    ]
+    total_events = sum(v["count"] or 0 for v in values)
+
+    return _success(
+        tool=tool,
+        data={"meta_key": meta_key, "values": values},
+        query=query_echo,
+        metadata={
+            "unique_values": len(values),
+            "total_events": total_events,
+            "applied_filter": full_filter,
+        },
+    )
 
 
-async def get_netwitness_token() -> str | None:
-    """Authenticates with Admin Server's API by posting credentials to the token endpoint and retrieves a JWT."""
-    logger.info("Attempting to retrieve JWT token...")
-    # Authentication endpoint for NetWitness
-    auth_url = f"{NW_ADMIN_URL}/rest/api/auth/userpass"
+# ---------------------------------------------------------------------------
+# JWT token retrieval (with simple in-process cache)
+# ---------------------------------------------------------------------------
+_token_cache: dict[str, Any] = {"token": None, "expires_at": 0.0}
 
-    if not NW_ADMIN_URL.strip() or not NW_ADMIN_USERNAME.strip() or not NW_ADMIN_PASSWORD.strip():
+
+async def get_netwitness_token(force_refresh: bool = False) -> Optional[str]:
+    """Authenticate with the Admin Server and retrieve a JWT, cached for TOKEN_TTL_SECONDS."""
+    import time
+    now = time.time()
+    if not force_refresh and _token_cache["token"] and _token_cache["expires_at"] > now:
+        return _token_cache["token"]
+
+    if not (NW_ADMIN_URL.strip() and NW_ADMIN_USERNAME.strip() and NW_ADMIN_PASSWORD.strip()):
         logger.error("Authentication details missing for token retrieval.")
         return None
 
-    # Payload must be form-encoded (or sometimes JSON, but form-encoded is common)
-    # The API expects 'username' and 'password' fields.
-    payload = {
-        "username": NW_ADMIN_USERNAME,
-        "password": NW_ADMIN_PASSWORD
-    }
-    
-    # Headers to specify form-data content
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded"
-    }
+    auth_url = f"{NW_ADMIN_URL}/rest/api/auth/userpass"
+    payload = {"username": NW_ADMIN_USERNAME, "password": NW_ADMIN_PASSWORD}
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     try:
         async with httpx.AsyncClient(verify=False) as client:
-            # We explicitly pass the credentials in the data field as form-encoded
-            response = await client.post(
-                auth_url, 
-                data=payload, 
-                headers=headers,
-                timeout=10
-            )
+            response = await client.post(auth_url, data=payload, headers=headers, timeout=10)
             response.raise_for_status()
-            
             try:
                 data = response.json()
-                token = data.get("accessToken")
-
-                if not token:
-                    logger.error("Token response missing 'accessToken' field.")
-                    return None
-                    
             except Exception as json_e:
-                logger.error(f"Failed to decode JSON response from token endpoint: {json_e}")
-                logger.error(f"Response body: {response.text[:200]}...")
+                logger.error("Failed to decode JSON from token endpoint: %s; body=%s",
+                             json_e, response.text[:200])
                 return None
-            # -----------------------------------------------------           
- 
-            logger.info("Successfully retrieved JWT token.")
+            token = data.get("accessToken")
+            if not token:
+                logger.error("Token response missing 'accessToken' field.")
+                return None
+            _token_cache["token"] = token
+            _token_cache["expires_at"] = now + TOKEN_TTL_SECONDS
+            logger.info("Successfully retrieved JWT token (cached for %ds).", TOKEN_TTL_SECONDS)
             return token
-            
     except httpx.HTTPStatusError as e:
-        logger.error(f"Failed to get JWT token: HTTP {e.response.status_code} - {e.response.text}")
+        logger.error("Failed to get JWT token: HTTP %s - %s", e.response.status_code, e.response.text)
         return None
     except httpx.RequestError as e:
-        logger.error(f"Request error during token retrieval: {e}")
+        logger.error("Request error during token retrieval: %s", e)
         return None
     except Exception as e:
-        logger.error(f"Unexpected error during token retrieval: {e}", exc_info=True)
+        logger.exception("Unexpected error during token retrieval: %s", e)
         return None
 
-@mcp.tool(annotations={"readOnlyHint": True,"sensitiveHint": "High"})
-async def query_alerts(
-    time_range: str = "1h",
-    max_results: int = 100
-) -> str:
-    """Retrieves NetWitness alerts in a specified time range (e.g., 30m, 1h, 24h). This uses JWT authentication for the Alert API. Returns a list of alert records including title, severity, and timestamp."""
-    
-    logger.info(f"Executing query_alerts: time={time_range}, limit={max_results}")
 
+# ---------------------------------------------------------------------------
+# query_alerts
+# ---------------------------------------------------------------------------
+@mcp.tool(annotations={"readOnlyHint": True, "sensitiveHint": "High"})
+async def query_alerts(time_range: str = "1h", max_results: int = 100) -> str:
+    """Retrieves NetWitness alerts in a specified time range (e.g., 30m, 1h, 24h). Uses JWT authentication for the Alert API. Returns structured alert records including title, severity, timestamp, source/destination context, and event count."""
+    tool = "query_alerts"
+    query_echo = {"time_range": time_range, "max_results": max_results}
+    logger.info("Executing %s: %s", tool, query_echo)
+
+    # ---- validation ----
     if not NW_ADMIN_URL.strip():
-        return "❌ Error: NW_ADMIN_URL is not configured."
-    
-    # --- AUTHENTICATION STEP ---
+        return _error(tool, "config_error", "NW_ADMIN_URL is not configured.", query_echo)
+    try:
+        parse_time_range(time_range)
+    except ValueError as e:
+        return _error(tool, "validation_error", str(e), query_echo)
+    if max_results <= 0:
+        return _error(tool, "validation_error", "max_results must be positive.", query_echo)
+
+    # ---- authenticate ----
     jwt_token = await get_netwitness_token()
     if not jwt_token:
-        return "❌ Authentication Error: Failed to retrieve a JWT token. Check NW_ADMIN_USERNAME/PASSWORD or NW_ADMIN_URL."
-    
+        return _error(
+            tool, "auth_error",
+            "Failed to retrieve a JWT token. Check NW_ADMIN_USERNAME/PASSWORD or NW_ADMIN_URL.",
+            query_echo,
+        )
+
     headers = {
         "NetWitness-Token": jwt_token,
-        "Accept": "application/json;charset=UTF-8"
+        "Accept": "application/json;charset=UTF-8",
     }
-    # ---------------------------
 
     try:
         start_time, end_time = calculate_start_time(time_range)
-    except Exception as e:
-        return f"❌ Error: Invalid time_range format: {str(e)}"
+    except ValueError as e:
+        return _error(tool, "validation_error", f"Invalid time_range: {e}", query_echo)
 
-    # Using the 'Get Alerts by Date Range' API: GET /rest/api/alerts?since=<start-time>&until=<end-time>&pageSize=<pageSize>
-    url = f"{NW_ADMIN_URL}/rest/api/alerts?since={quote_plus(start_time)}&until={quote_plus(end_time)}&pageSize={max_results}"
+
+    url = (
+        f"{NW_ADMIN_URL}/rest/api/alerts"
+        f"?since={quote_plus(start_time)}"
+        f"&pageSize={max_results}"
+    )
 
     try:
-        # Note: No auth=(...) here. The JWT token is passed in the headers.
         async with httpx.AsyncClient(headers=headers, verify=False) as client:
-            response = await client.get(url, timeout=30)
+            response = await client.get(url, timeout=DEFAULT_HTTP_TIMEOUT)
             response.raise_for_status()
             data = response.json()
-
-            results = data.get('items', [])
-           
-            if not results:
-                return f"No alerts found for the given time range ({time_range})."
-            
-            formatted_output = f"**NetWitness Alerts** (Last {time_range})\n\n"
-            
-            lines = []
-            for alert in results:
-                alert_id = alert.get('id')
-                alert_name = alert.get('name', 'N/A')
-                alert_priority = alert.get('priority')
-                alert_timestamp = alert.get('timestamp')
-                groupby_data = alert.get('alert', {})
-                alert_numevents = groupby_data.get('numEvents')
-                alert_ip_src = groupby_data.get('groupby_source_ip')
-                alert_ip_dst = groupby_data.get('groupby_destination_ip')
-                alert_port_dst = groupby_data.get('groupby_destination_port')
-                alert_domain = groupby_data.get('groupby_domain')
-                alert_domain_dst = groupby_data.get('groupby_domain_dst')
-
-                
-                # The timestamp in the alert response is typically in milliseconds epoch.
-                try:
-                    ts_dt = datetime.fromtimestamp(alert_timestamp / 1000, tz=timezone.utc)
-                    timestamp_str = ts_dt.isoformat().replace('+00:00', 'Z')
-                except:
-                    timestamp_str = str(alert_timestamp)
-                    
-                lines.append(f"**Name**: {alert_name}")
-                lines.append(f"- **Priority**: {alert_priority}")
-                lines.append(f"- **Time**: {timestamp_str}")
-                lines.append(f"- **Alert ID**: {alert_id}")
-                lines.append(f"- **Number of Events**: {alert_numevents}")
-                lines.append(f"- **Source IP**: {alert_ip_src}")
-                lines.append(f"- **Destination IP**: {alert_ip_dst}")
-                lines.append(f"- **Destination Port**: {alert_port_dst}")
-                lines.append(f"- **Domain**: {alert_domain}")
-                lines.append(f"- **Destination Domain**: {alert_domain_dst}")
-                lines.append("---")
-            
-            formatted_output += "\n".join(lines[:-1]) # remove trailing ---
-            formatted_output += f"\n\n**Total Alerts**: {len(results)}"
-            
-            return formatted_output.strip()
-
     except httpx.HTTPStatusError as e:
-        error_msg = e.response.text
-        logger.error(f"HTTP error during NetWitness alert query: {e.response.status_code} - {error_msg}")
-        return f"❌ NetWitness Alert API Error: {e.response.status_code} - {error_msg}"
+        return _error(
+            tool, "http_error",
+            f"NetWitness Alert API returned HTTP {e.response.status_code}: {e.response.text[:500]}",
+            query_echo,
+            metadata={"http_status": e.response.status_code},
+        )
     except httpx.RequestError as e:
-        logger.error(f"Request error during NetWitness alert query: {e}")
-        return f"❌ Request Error: Unable to connect to NetWitness API. {str(e)}"
+        return _error(tool, "request_error", f"Unable to connect to NetWitness Alert API: {e}", query_echo)
     except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
-        return f"❌ An unexpected error occurred: {str(e)}"
+        logger.exception("Unexpected error in %s", tool)
+        return _error(tool, "unexpected_error", str(e), query_echo)
+
+    raw_alerts = data.get("items", []) or []
+    alerts: list[dict[str, Any]] = []
+    for alert in raw_alerts:
+        groupby = alert.get("alert", {}) or {}
+        ts_raw = alert.get("timestamp")
+        ts_iso: Optional[str] = None
+        if isinstance(ts_raw, (int, float)):
+            try:
+                ts_iso = datetime.fromtimestamp(ts_raw / 1000, tz=timezone.utc)                     .isoformat().replace("+00:00", "Z")
+            except Exception:
+                ts_iso = None
+
+        alerts.append({
+            "id":                    alert.get("id"),
+            "name":                  alert.get("name"),
+            "priority":              alert.get("priority"),
+            "timestamp_epoch_ms":    ts_raw,
+            "timestamp_iso":         ts_iso,
+            "num_events":            groupby.get("numEvents"),
+            "source_ip":             groupby.get("groupby_source_ip"),
+            "destination_ip":        groupby.get("groupby_destination_ip"),
+            "destination_port":      groupby.get("groupby_destination_port"),
+            "domain":                groupby.get("groupby_domain"),
+            "destination_domain":    groupby.get("groupby_domain_dst"),
+            "source_domain":         groupby.get("groupby_domain_src"),
+            "destination_country":   groupby.get("groupby_destination_country"),
+            "source_country":        groupby.get("groupby_source_country"),
+            "filename":              groupby.get("groupby_filename"),
+            "file_sha256":           groupby.get("groupby_file_sha_256"),
+            "hostname":              groupby.get("groupby_host_name"),
+            "destination_ad_user":   groupby.get("groupby_dst_usr_ad_username"),
+            "destination_ad_domain": groupby.get("groupby_dst_usr_ad_domain"),
+            "source_ad_user":        groupby.get("groupby_src_usr_ad_username"),
+            "source_ad_domain":      groupby.get("groupby_src_usr_ad_domain"),
+            "username":              groupby.get("groupby_username"),
+            "destination_user":      groupby.get("groupby_user_dst"),
+            "source_user":           groupby.get("groupby_user_src"),
+        })
+
+    return _success(
+        tool=tool,
+        data={"alerts": alerts},
+        query=query_echo,
+        metadata={
+            "alert_count": len(alerts),
+            "since": start_time,
+        },
+    )
 
 
-# === SERVER STARTUP ===
+# ---------------------------------------------------------------------------
+# query_incidents
+# ---------------------------------------------------------------------------
+INCIDENTS_MAX_PAGE_SIZE = 100
+
+
+@mcp.tool(annotations={"readOnlyHint": True, "sensitiveHint": "High"})
+async def query_incidents(time_range: str = "1h", max_results: int = 100) -> str:
+    """Retrieves NetWitness Respond incidents in a specified time range (e.g., 30m, 1h, 24h). Uses JWT authentication for the Respond API. max_results is capped at 100 (the API page-size maximum). Returns structured incident records including id, title, priority, risk score, status, alert/event counts, assignee, sources, categories, and source/destination IPs from alertMeta."""
+    tool = "query_incidents"
+    query_echo = {"time_range": time_range, "max_results": max_results}
+    logger.info("Executing %s: %s", tool, query_echo)
+
+    # ---- validation ----
+    if not NW_ADMIN_URL.strip():
+        return _error(tool, "config_error", "NW_ADMIN_URL is not configured.", query_echo)
+    try:
+        parse_time_range(time_range)
+    except ValueError as e:
+        return _error(tool, "validation_error", str(e), query_echo)
+    if max_results <= 0:
+        return _error(tool, "validation_error", "max_results must be positive.", query_echo)
+
+    # Cap at the API maximum (page size limit)
+    effective_max = min(max_results, INCIDENTS_MAX_PAGE_SIZE)
+    capped = effective_max != max_results
+
+    # ---- authenticate ----
+    jwt_token = await get_netwitness_token()
+    if not jwt_token:
+        return _error(
+            tool, "auth_error",
+            "Failed to retrieve a JWT token. Check NW_ADMIN_USERNAME/PASSWORD or NW_ADMIN_URL.",
+            query_echo,
+        )
+
+    headers = {
+        "NetWitness-Token": jwt_token,
+        "Accept": "application/json;charset=UTF-8",
+    }
+
+    try:
+        start_time, end_time = calculate_start_time(time_range)
+    except ValueError as e:
+        return _error(tool, "validation_error", f"Invalid time_range: {e}", query_echo)
+
+    url = (
+        f"{NW_ADMIN_URL}/rest/api/incidents"
+        f"?since={quote_plus(start_time)}"
+        f"&until={quote_plus(end_time)}"
+        f"&pageSize={effective_max}"
+    )
+
+    try:
+        async with httpx.AsyncClient(headers=headers, verify=False) as client:
+            response = await client.get(url, timeout=DEFAULT_HTTP_TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPStatusError as e:
+        return _error(
+            tool, "http_error",
+            f"NetWitness Respond API returned HTTP {e.response.status_code}: {e.response.text[:500]}",
+            query_echo,
+            metadata={"http_status": e.response.status_code},
+        )
+    except httpx.RequestError as e:
+        return _error(tool, "request_error", f"Unable to connect to NetWitness Respond API: {e}", query_echo)
+    except Exception as e:
+        logger.exception("Unexpected error in %s", tool)
+        return _error(tool, "unexpected_error", str(e), query_echo)
+
+    raw_incidents = data.get("items", []) or []
+
+    metadata = {
+        "incident_count": len(raw_incidents),
+        "since": start_time,
+        "until": end_time,
+        "page_size": effective_max,
+    }
+    if capped:
+        metadata["max_results_capped"] = True
+        metadata["max_results_requested"] = max_results
+        metadata["max_results_applied"] = effective_max
+
+    return _success(
+        tool=tool,
+        data={"incidents": raw_incidents},
+        query=query_echo,
+        metadata=metadata,
+    )
+
+
+# ---------------------------------------------------------------------------
+# query_incident_alerts
+# ---------------------------------------------------------------------------
+import re
+
+INCIDENT_ID_RE = re.compile(r"^INC-\d+$", re.IGNORECASE)
+INCIDENT_ALERTS_MAX_PAGE_SIZE = 100
+
+
+@mcp.tool(annotations={"readOnlyHint": True, "sensitiveHint": "High"})
+async def query_incident_alerts(
+    incident_id: str,
+    max_results: int = 100,
+    page_number: int = 0,
+) -> str:
+    """Retrieves all alerts associated with a specific NetWitness Respond incident. incident_id must be in the form 'INC-<number>' (e.g. 'INC-534'). max_results is capped at 100 (the API page-size maximum); use page_number to paginate through larger result sets starting from 0. Returns structured alert records with name, severity, timestamp, source/destination context, event count, and the raw alert payload."""
+    tool = "query_incident_alerts"
+    query_echo = {
+        "incident_id": incident_id,
+        "max_results": max_results,
+        "page_number": page_number,
+    }
+    logger.info("Executing %s: %s", tool, query_echo)
+
+    # ---- validation ----
+    if not NW_ADMIN_URL.strip():
+        return _error(tool, "config_error", "NW_ADMIN_URL is not configured.", query_echo)
+    if not incident_id or not incident_id.strip():
+        return _error(tool, "validation_error", "incident_id is required.", query_echo)
+    inc_id = incident_id.strip().upper()
+    if not INCIDENT_ID_RE.match(inc_id):
+        return _error(
+            tool, "validation_error",
+            f"incident_id must look like 'INC-<number>' (e.g. 'INC-534'); got {incident_id!r}",
+            query_echo,
+        )
+    if max_results <= 0:
+        return _error(tool, "validation_error", "max_results must be positive.", query_echo)
+    if page_number < 0:
+        return _error(tool, "validation_error", "page_number must be >= 0.", query_echo)
+
+    effective_max = min(max_results, INCIDENT_ALERTS_MAX_PAGE_SIZE)
+    capped = effective_max != max_results
+
+    # ---- authenticate ----
+    jwt_token = await get_netwitness_token()
+    if not jwt_token:
+        return _error(
+            tool, "auth_error",
+            "Failed to retrieve a JWT token. Check NW_ADMIN_USERNAME/PASSWORD or NW_ADMIN_URL.",
+            query_echo,
+        )
+
+    headers = {
+        "NetWitness-Token": jwt_token,
+        "Accept": "application/json;charset=UTF-8",
+    }
+
+    # URL-encode the incident id segment defensively, even though INC-### is path-safe.
+    url = (
+        f"{NW_ADMIN_URL}/rest/api/incidents/{quote_plus(inc_id)}/alerts"
+        f"?pageSize={effective_max}&pageNumber={page_number}"
+    )
+
+    try:
+        async with httpx.AsyncClient(headers=headers, verify=False) as client:
+            response = await client.get(url, timeout=DEFAULT_HTTP_TIMEOUT)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPStatusError as e:
+        # 404 is meaningful here -> distinct code
+        if e.response.status_code == 404:
+            return _error(
+                tool, "not_found",
+                f"Incident {inc_id} not found.",
+                query_echo,
+                metadata={"http_status": 404},
+            )
+        return _error(
+            tool, "http_error",
+            f"NetWitness Respond API returned HTTP {e.response.status_code}: {e.response.text[:500]}",
+            query_echo,
+            metadata={"http_status": e.response.status_code},
+        )
+    except httpx.RequestError as e:
+        return _error(tool, "request_error", f"Unable to connect to NetWitness Respond API: {e}", query_echo)
+    except Exception as e:
+        logger.exception("Unexpected error in %s", tool)
+        return _error(tool, "unexpected_error", str(e), query_echo)
+
+    # The response may be either a paginated envelope ({items: [...], pageNumber, pageSize, totalPages, totalItems})
+    # or a bare list, depending on NW version. Handle both.
+    if isinstance(data, list):
+        raw_alerts = data
+        page_meta: dict[str, Any] = {}
+    else:
+        raw_alerts = data.get("items", []) or []
+        page_meta = {
+            k: data.get(k)
+            for k in ("pageNumber", "pageSize", "totalPages", "totalItems")
+            if data.get(k) is not None
+        }
+
+    metadata = {
+        "incident_id": inc_id,
+        "alert_count": len(raw_alerts),
+        "page_number": page_number,
+        "page_size": effective_max,
+    }
+    if page_meta:
+        metadata["pagination"] = page_meta
+    if capped:
+        metadata["max_results_capped"] = True
+        metadata["max_results_requested"] = max_results
+        metadata["max_results_applied"] = effective_max
+
+    return _success(
+        tool=tool,
+        data={"incident_id": inc_id, "alerts": raw_alerts},
+        query=query_echo,
+        metadata=metadata,
+    )
+
+
+# ---------------------------------------------------------------------------
+# update_incident_status
+# ---------------------------------------------------------------------------
+VALID_INCIDENT_STATUSES = {
+    "New",
+    "Assigned",
+    "InProgress",
+    "Closed",
+    "ClosedFalsePositive",
+}
+
+
+@mcp.tool(annotations={"readOnlyHint": False, "destructiveHint": True, "sensitiveHint": "High"})
+async def update_incident_status(incident_id: str, status: str) -> str:
+    """Update the status of a NetWitness Respond incident. incident_id must look like 'INC-<number>' (e.g. 'INC-534'). status must be one of: New, Assigned, InProgress, Closed, ClosedFalsePositive. This is a write operation that modifies incident state in NetWitness."""
+    tool = "update_incident_status"
+    query_echo = {"incident_id": incident_id, "status": status}
+    logger.info("Executing %s: %s", tool, query_echo)
+
+    # ---- validation ----
+    if not NW_ADMIN_URL.strip():
+        return _error(tool, "config_error", "NW_ADMIN_URL is not configured.", query_echo)
+    if not incident_id or not incident_id.strip():
+        return _error(tool, "validation_error", "incident_id is required.", query_echo)
+    inc_id = incident_id.strip().upper()
+    if not INCIDENT_ID_RE.match(inc_id):
+        return _error(
+            tool, "validation_error",
+            f"incident_id must look like 'INC-<number>' (e.g. 'INC-534'); got {incident_id!r}",
+            query_echo,
+        )
+    if not status or not status.strip():
+        return _error(tool, "validation_error", "status is required.", query_echo)
+    status_clean = status.strip()
+    # Case-insensitive match against the canonical set, but send canonical casing.
+    canonical = next(
+        (s for s in VALID_INCIDENT_STATUSES if s.lower() == status_clean.lower()),
+        None,
+    )
+    if canonical is None:
+        return _error(
+            tool, "validation_error",
+            f"status must be one of {sorted(VALID_INCIDENT_STATUSES)}; got {status!r}",
+            query_echo,
+        )
+
+    # ---- authenticate ----
+    jwt_token = await get_netwitness_token()
+    if not jwt_token:
+        return _error(
+            tool, "auth_error",
+            "Failed to retrieve a JWT token. Check NW_ADMIN_USERNAME/PASSWORD or NW_ADMIN_URL.",
+            query_echo,
+        )
+
+    headers = {
+        "NetWitness-Token": jwt_token,
+        "Accept": "application/json;charset=UTF-8",
+        "Content-Type": "application/json;charset=UTF-8",
+    }
+    url = f"{NW_ADMIN_URL}/rest/api/incidents/{quote_plus(inc_id)}"
+    body = {"status": canonical}
+
+    try:
+        async with httpx.AsyncClient(headers=headers, verify=False) as client:
+            response = await client.patch(url, json=body, timeout=DEFAULT_HTTP_TIMEOUT)
+            response.raise_for_status()
+            try:
+                data = response.json()
+            except Exception:
+                data = {"raw": response.text}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return _error(
+                tool, "not_found",
+                f"Incident {inc_id} not found.",
+                query_echo,
+                metadata={"http_status": 404},
+            )
+        return _error(
+            tool, "http_error",
+            f"NetWitness Respond API returned HTTP {e.response.status_code}: {e.response.text[:500]}",
+            query_echo,
+            metadata={"http_status": e.response.status_code},
+        )
+    except httpx.RequestError as e:
+        return _error(tool, "request_error", f"Unable to connect to NetWitness Respond API: {e}", query_echo)
+    except Exception as e:
+        logger.exception("Unexpected error in %s", tool)
+        return _error(tool, "unexpected_error", str(e), query_echo)
+
+    return _success(
+        tool=tool,
+        data={"incident_id": inc_id, "status": canonical, "response": data},
+        query=query_echo,
+        metadata={"incident_id": inc_id, "new_status": canonical, "http_status": 200},
+    )
+
+
+# ---------------------------------------------------------------------------
+# add_incident_journal_entry
+# ---------------------------------------------------------------------------
+
+@mcp.tool(annotations={"readOnlyHint": False, "sensitiveHint": "High"})
+async def add_incident_journal_entry(
+    incident_id: str,
+    author: str,
+    notes: str,
+) -> str:
+    """Add a journal entry to a NetWitness Respond incident. incident_id must look like 'INC-<number>' (e.g. 'INC-534'). author is the user adding the entry. notes is the journal text. This is a write operation that appends a new journal entry to the incident."""
+    tool = "add_incident_journal_entry"
+    query_echo = {
+        "incident_id": incident_id,
+        "author": author,
+        "notes": notes,
+    }
+    logger.info("Executing %s: %s", tool, {**query_echo, "notes": f"<{len(notes or '')} chars>"})
+
+    # ---- validation ----
+    if not NW_ADMIN_URL.strip():
+        return _error(tool, "config_error", "NW_ADMIN_URL is not configured.", query_echo)
+    if not incident_id or not incident_id.strip():
+        return _error(tool, "validation_error", "incident_id is required.", query_echo)
+    inc_id = incident_id.strip().upper()
+    if not INCIDENT_ID_RE.match(inc_id):
+        return _error(
+            tool, "validation_error",
+            f"incident_id must look like 'INC-<number>' (e.g. 'INC-534'); got {incident_id!r}",
+            query_echo,
+        )
+    if not author or not author.strip():
+        return _error(tool, "validation_error", "author is required.", query_echo)
+    if not notes or not notes.strip():
+        return _error(tool, "validation_error", "notes is required.", query_echo)
+
+    # ---- authenticate ----
+    jwt_token = await get_netwitness_token()
+    if not jwt_token:
+        return _error(
+            tool, "auth_error",
+            "Failed to retrieve a JWT token. Check NW_ADMIN_USERNAME/PASSWORD or NW_ADMIN_URL.",
+            query_echo,
+        )
+
+    headers = {
+        "NetWitness-Token": jwt_token,
+        "Accept": "application/json;charset=UTF-8",
+        "Content-Type": "application/json;charset=UTF-8",
+    }
+    url = f"{NW_ADMIN_URL}/rest/api/incidents/{quote_plus(inc_id)}/journal"
+    body = {
+        "author": author.strip(),
+        "notes": notes,
+    }
+
+    try:
+        async with httpx.AsyncClient(headers=headers, verify=False) as client:
+            response = await client.post(url, json=body, timeout=DEFAULT_HTTP_TIMEOUT)
+            response.raise_for_status()
+            try:
+                data = response.json()
+            except Exception:
+                data = {"raw": response.text}
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 404:
+            return _error(
+                tool, "not_found",
+                f"Incident {inc_id} not found.",
+                query_echo,
+                metadata={"http_status": 404},
+            )
+        return _error(
+            tool, "http_error",
+            f"NetWitness Respond API returned HTTP {e.response.status_code}: {e.response.text[:500]}",
+            query_echo,
+            metadata={"http_status": e.response.status_code},
+        )
+    except httpx.RequestError as e:
+        return _error(tool, "request_error", f"Unable to connect to NetWitness Respond API: {e}", query_echo)
+    except Exception as e:
+        logger.exception("Unexpected error in %s", tool)
+        return _error(tool, "unexpected_error", str(e), query_echo)
+
+    return _success(
+        tool=tool,
+        data={
+            "incident_id": inc_id,
+            "journal_entry": {
+                "author": author.strip(),
+                "notes": notes,
+            },
+            "response": data,
+        },
+        query=query_echo,
+        metadata={"incident_id": inc_id, "http_status": response.status_code},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Server startup
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     logger.info("Starting NetWitness MCP server...")
-    
     if not API_URL:
         logger.warning("NETWITNESS_API_URL environment variable is not set.")
     if not API_USERNAME:
         logger.warning("NETWITNESS_USERNAME environment variable is not set.")
     if not API_PASSWORD:
         logger.warning("NETWITNESS_PASSWORD environment variable is not set.")
-    
-    logger.info("Available tools: query_sessions, query_metakey_values, query_alerts, get_netwitness_meta_keys, get_netwitness_query_syntax")
+    if not NW_ADMIN_URL:
+        logger.warning("NW_ADMIN_URL environment variable is not set.")
+
+    logger.info("Available tools: query_sessions, query_metakey_values, query_alerts, "
+                "query_incidents, query_incident_alerts, "
+                "update_incident_status, add_incident_journal_entry, "
+                "get_netwitness_meta_keys, get_netwitness_query_syntax")
     logger.info("Available resources: netwitness://meta-keys, netwitness://query-syntax")
-    
+
     try:
-        mcp.run(transport='stdio')
+        mcp.run(transport="stdio")
     except Exception as e:
-        logger.error(f"Server error: {e}", exc_info=True)
+        logger.exception("Server error: %s", e)
         sys.exit(1)
-        
