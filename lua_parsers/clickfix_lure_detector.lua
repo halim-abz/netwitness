@@ -10,9 +10,10 @@
           1. Run-dialog / keyboard instructions (Win+R, Ctrl+V, "open the Run dialog")
           2. Clipboard JavaScript (navigator.clipboard.writeText, execCommand('copy'))
           3. Staged payloads (powershell -w hidden, mshta http, IEX(New-Object, etc.)
+		  4. Whitelists common O365 domains that trigger similar behavior when accessed from web
  
     Registered meta : ioc (text)
-    Version         : 1.0
+    Version         : 2.0
 --]]
 
 local ClickFixLure = nw.createParser("clickfixlure", "Detects ClickFix social engineering lures in HTTP responses")
@@ -27,13 +28,14 @@ ClickFixLure:setKeys({
 --[[
     Per-session variable. Variables are reset at OnSessionBegin.
 --]]
+local isWhitelist = false
 local isRun = false
-local isCopy = false
 local isClipboard = false
 local isPayload = false
 local ruleTriggered = false
 
 local function resetState()
+	isWhitelist = false
 	isRun = false
 	isClipboard = false
 	isPayload = false
@@ -52,7 +54,7 @@ local function evaluate()
     if isClipboard	then count = count + 1 end
     if isPayload	then count = count + 1 end
 
-    if count >= 2 then
+    if count >= 2 and isWhitelist == false then
         nw.createMeta(ClickFixLure.keys.ioc, "clickfix lure")
         ruleTriggered = true
     end
@@ -61,6 +63,21 @@ end
 --[[
     Set variables to true if related indicator has been seen.
 --]]
+
+-- Checks if the host value contains a whitelisted domain
+local function checkWhitelist(token, first, last)
+	current_position = last + 1			-- set position to byte after the token
+	local payload = nw.getPayload()		-- get the payload
+	local end_of_line = payload:find("\13", current_position, current_position + 100)	-- find the end of the line
+	if end_of_line ~= nil then			-- if we found the end of the line
+		end_of_line = end_of_line - 1	-- we don't want to read the \13
+		local extracted_string = payload:tostring(current_position, end_of_line)	-- read up to the end of the line
+		if extracted_string:find("%.sharepoint.com") then isWhitelist = true end
+		if extracted_string:find("%.office.com") then isWhitelist = true end
+		if extracted_string:find("%.office.net") then isWhitelist = true end
+		if extracted_string:find("%.office265.com") then isWhitelist = true end
+	end
+end
 
 local function markRun()
 	isRun = true
@@ -82,6 +99,10 @@ ClickFixLure:setCallbacks({
 
     -- Session lifecycle: reset per-session state on new stream
     [nwevents.OnSessionBegin] = resetState(),
+
+    -- ---- Whitelisting ---------------------------
+    ["Host: "]      = checkWhitelist,
+    ["host: "]      = checkWhitelist,
 
     -- ---- Bucket 1: Run-dialog / keyboard instructions ---------------------------
     ["Windows Key + R"]      = markRun,
